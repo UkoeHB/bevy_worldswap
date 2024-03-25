@@ -1,0 +1,39 @@
+[package]
+name = "bevy_worldswap"
+description = "Swap Bevy Worlds at runtime"
+authors = ["koe <ukoe@protonmail.com>"]
+version = "0.0.1"
+edition = "2021"
+keywords = ["gamedev"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/UkoeHB/bevy_worldswap"
+
+[workspace]
+resolver = "2"
+exclude = [
+    "examples",
+    "assets"
+]
+
+[lib]
+path = "src/lib.rs"
+doctest = false
+test = false
+
+[[test]]
+name = "tests"
+path = "tests/test/mod.rs"
+doctest = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+bevy           = { version = "0.13", default-features = false }
+crossbeam      = { version = "0.8" }
+tracing        = { version = "0.1.27" }
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3" }
