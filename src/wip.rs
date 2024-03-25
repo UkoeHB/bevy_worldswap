@@ -6,13 +6,11 @@
 Implementation plan: Swap between worlds that run in the same update loop (and render to the same window(s)).
 
 - Bevy changes required
-    - subapp execution order should equal registration order (without this, it's possible to get 1-frame hiccups when
-    swapping worlds)
-    - pass the parent App to a subapp on extract, rather than its World (this allows removing/adding other subapps)
     - update AssetPlugin so it won't add an AssetServer if one already exists
     - In the winit runner, there are SystemStates cached outside the running App. These are initialized with the original
     world, so subsequent accesses will be invalid.
         - Add a check with .matches_world(). If not matching, then reinitialize the query states.
+    - winit system changed_windows needs to be public
 
 - Bevy changes nice-to-have
     - make AudioPlaySet public
@@ -29,6 +27,9 @@ Implementation plan: Swap between worlds that run in the same update loop (and r
     - Is it necessary to clear all windows when swapping between worlds? For example, you may want your menu to stay
     in one window, and your game to pop up in a new window. The menu window should go black, not display the last rendered
     frame from the menu world.
+    - For background apps that never update, how to avoid extremely large delta-t messing things up when the app is resumed?
+    - What happens to audio when you swap worlds? bevy_audio and bevy_kira_audio
+        - Users might need to manually pause audio if they want play/pause functionality.
 
 - WindowpassPlugin
     - background_tick_rate: controls how the primary world updates while in the background.

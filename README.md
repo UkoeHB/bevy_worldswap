@@ -1,6 +1,6 @@
 # Bevy World-Swap
 
-Swap an app's `World` at runtime with another `World`. Useful for having separate menu and game worlds, for separate loading and main worlds, etc.
+Swap an app's `World` with another `World` at runtime. Useful for having separate menu and game worlds, for separate loading and main worlds, etc.
 
 
 ## Features
