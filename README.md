@@ -40,21 +40,21 @@ A `bevy_worldswap` app can hold two worlds. The **foreground** world is just a n
 
 ## SwapCommands
 
-Controlling foreground/background worlds is done with [`SwapCommands`](bevy_worldswap::SwapCommand). Swap commands can be sent from within both foreground and background worlds using the [`SwapCommandSender`](bevy_worldswap::SwapCommandSender) resource.
+Controlling foreground/background worlds is done with [`SwapCommands`](bevy_worldswap::SwapCommand). Swap commands can be sent from both foreground and background worlds using the [`SwapCommandSender`](bevy_worldswap::SwapCommandSender) resource.
 
 The following commands are provided:
-- [SwapCommand::Pass](bevy_worldswap::SwapCommand::Pass): Pass control of the foreground to a new [`WorldSwapApp`](bevy_worldswap::WorldSwapApp) and drop (or [recover](WorldSwapPlugin::swap_pass_recovery)) the world currently in the foreground.
-- [SwapCommand::Fork](bevy_worldswap::SwapCommand::Fork): Pass control of the foreground to a new [`WorldSwapApp`](bevy_worldswap::WorldSwapApp) and put the world currently in the foreground into the background.
-- [SwapCommand::Swap](bevy_worldswap::SwapCommand::Swap): Switch the foreground and background worlds.
-- [SwapCommand::Join](bevy_worldswap::SwapCommand::Join): Pass control of the foreground to the background world, and drop (or [recover](WorldSwapPlugin::swap_join_recovery)) the previous foreground world.
+- [**SwapCommand::Pass**](bevy_worldswap::SwapCommand::Pass): Pass control of the foreground to a new [`WorldSwapApp`](bevy_worldswap::WorldSwapApp) and drop (or [recover](WorldSwapPlugin::swap_pass_recovery)) the world currently in the foreground.
+- [**SwapCommand::Fork**](bevy_worldswap::SwapCommand::Fork): Pass control of the foreground to a new [`WorldSwapApp`](bevy_worldswap::WorldSwapApp) and put the world currently in the foreground into the background.
+- [**SwapCommand::Swap**](bevy_worldswap::SwapCommand::Swap): Switch the foreground and background worlds.
+- [**SwapCommand::Join**](bevy_worldswap::SwapCommand::Join): Pass control of the foreground to the background world, and drop (or [recover](WorldSwapPlugin::swap_join_recovery)) the previous foreground world.
 
-You can use the [`WorldSwapStatus`](bevy_worldswap::WorldSwapStatus) resource to detect whether a world is in the foreground, background, or is suspended. There are also several run conditions: [`suspended`](bevy_worldswap::suspended), [`in_background`](bevy_worldswap::in_background), [`in_foreground`](bevy_worldswap::in_foreground), [`entered_foreground`](bevy_worldswap::entered_foreground), [`entered_background`](bevy_worldswap::entered_background).
+You can use the [`WorldSwapStatus`](bevy_worldswap::WorldSwapStatus) resource to detect whether a world is in the foreground or background, or if it's suspended. There are also several run conditions: [`suspended`](bevy_worldswap::suspended), [`in_background`](bevy_worldswap::in_background), [`in_foreground`](bevy_worldswap::in_foreground), [`entered_foreground`](bevy_worldswap::entered_foreground), [`entered_background`](bevy_worldswap::entered_background).
 
 
 
 ## Setting up your main app
 
-Your main app needs to use [`WorldSwapPlugin`](bevy_worldswap::WorldSwapPlugin). That's it!
+Your main app needs to use [`WorldSwapPlugin`](bevy_worldswap::WorldSwapPlugin), which must be added after [`DefaultPlugins`](bevy::prelude::DefaultPlugins) if you use them.
 
 The initial app you set up will contain the first foreground world, which can be sent to the background or passed to other worlds with [`SwapCommands`](bevy_worldswap::SwapCommand).
 
@@ -65,6 +65,7 @@ use bevy_worldswap::prelude::*;
 fn main()
 {
     App::new()
+        .add_plugins(DefaultPlugins)  // Must go before WorldSwapPlugin if you add this.
         // ...
         .add_plugins(WorldSwapPlugin::default())
         // ...
@@ -78,7 +79,7 @@ fn main()
 
 To make a new app that should run in the foreground, you need either [`ChildCorePlugin`](bevy_worldswap::ChildCorePlugin) or [`ChildDefaultPlugins`](bevy_worldswap::ChildDefaultPlugins). The core plugin should be used *in addition* to [`MinimalPlugins`](bevy::prelude::MinimalPlugins) and [`AssetPlugin`](bevy::prelude::AssetPlugin). The default plugins should be used *instead of* [`DefaultPlugins`](bevy::prelude::DefaultPlugins).
 
-Once your new app is made, you need to make a new [`WorldSwapApp`](bevy_worldswap::WorldSwapApp), which holds your app in a way that allows its world to be swapped between the foreground and background.
+Once your new app is made, pass it to [`WorldSwapApp::new`](bevy_worldswap::WorldSwapApp::new). The [`WorldSwapApp`](bevy_worldswap::WorldSwapApp) holds your app while suspended or in the background.
 
 ```rust
 use bevy::prelude::*;
@@ -102,7 +103,7 @@ fn pass_control_to_new_app(asset_server: Res<AssetServer>, swap_commands: Res<Sw
 
 ## Recovering data from passed and joined worlds
 
-If a [`Pass`](bevy_worldswap::SwapCommand::Pass) command is detected, then the passed world will enter the foreground. The previous foreground world will either be dropped, or it can be recovered, depending on if the [`WorldSwapPlugin::swap_pass_recovery`](WorldSwapPlugin::swap_pass_recovery) callback is set.
+If a [`Pass`](bevy_worldswap::SwapCommand::Pass) command is detected, then the passed world will enter the foreground. The previous foreground world will either be dropped or recovered, depending on if the [`WorldSwapPlugin::swap_pass_recovery`](WorldSwapPlugin::swap_pass_recovery) callback is set.
 
 For example:
 ```rust
@@ -117,7 +118,8 @@ fn main()
             swap_pass_recovery: Some(
                 |foreground_world: &mut World, prev_app: WorldSwapApp|
                 {
-                    // Extract data from the previous app, or cache it for sending into the foreground again!
+                    // Extract data from the previous app, or cache it for sending
+                    // into the foreground again!
                 }
             ),
             ..Default::default()
@@ -127,25 +129,25 @@ fn main()
 }
 ```
 
-An app passed to the recovery callback will have [`WorldSwapStatus::Suspended`](bevy_worldswap::WorldSwapStatus::Suspended).
+Apps passed to the recovery callback will have [`WorldSwapStatus::Suspended`](bevy_worldswap::WorldSwapStatus::Suspended).
 
-A similar pattern holds for [`Join`](bevy_worldswap::SwapCommand::Join) commands, with the [`WorldSwapPlugin::swap_join_recovery`](WorldSwapPlugin::swap_join_recovery) calback.
+A similar pattern holds for [`Join`](bevy_worldswap::SwapCommand::Join) commands, with the [`WorldSwapPlugin::swap_join_recovery`](WorldSwapPlugin::swap_join_recovery) callback.
 
-**Note**: When a foreground world sends `AppExit` and there is a world in the background, then the `AppExit` will be intercepted after the `Main` schedule is done and transformed into a [`Join`](bevy_worldswap::SwapCommand::Join) command. Otherwise the entire app will shut down.
+**Note**: When a foreground world sends `AppExit` and there is a world in the background, then the `AppExit` will be intercepted after the `Main` schedule is done and transformed into a [`Join`](bevy_worldswap::SwapCommand::Join) command. Otherwise the `AppExit` will be allowed to pass through and the entire app will shut down.
 
 
 
 ## Caveats
 
 This project has a couple caveats to keep in mind.
-- **Logging**: Foreground and background worlds will log to the same output stream.
-- **SubApps**: `SubApps` in additional apps you construct will be discarded (other than `RenderApp`/`RenderExtractApp`, which we manage internally).
+- **Logging**: Foreground and background worlds log to the same output stream.
+- **SubApps**: `SubApps` in secondary apps you construct will be discarded (other than `RenderApp`/`RenderExtractApp`, which we extract and manage internally).
 
 
 
 ## `rustfmt`
 
-This project has a custom `rustfmt.toml` file. To run it you can use `cargo +nightly fmt --all`. Nightly is not required for using this crate, only `rustfmt`.
+This project has a custom `rustfmt.toml` file. To run it you can use `cargo +nightly fmt --all`. Nightly is not required for using this crate, only for running `rustfmt`.
 
 
 
