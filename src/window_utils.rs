@@ -12,7 +12,7 @@ pub(crate) fn map_winit_window_entities(
 ) -> Option<Entity>
 {
     let window_id = windows_a.entity_to_winit.get(&entity_a)?;
-    windows_b.winit_to_entity().get(window_id)
+    windows_b.winit_to_entity.get(window_id).copied()
 }
 
 //-------------------------------------------------------------------------------------------------------------------

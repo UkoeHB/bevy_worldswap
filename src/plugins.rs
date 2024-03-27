@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use bevy::a11y::Focus;
 use bevy::app::{PluginGroupBuilder, SubApp};
+use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::RenderExtractApp;
 use bevy::render::renderer::{RenderAdapter, RenderAdapterInfo, RenderDevice, RenderInstance, RenderQueue};
@@ -23,7 +24,7 @@ fn collect_window_events(
     mut backend_scale_factor_events: EventReader<WindowBackendScaleFactorChanged>,
     mut scale_factor_events: EventReader<WindowScaleFactorChanged>,
     mut theme_events: EventReader<WindowThemeChanged>,
-    mut event_cache: WindowEventCache,
+    mut event_cache: ResMut<WindowEventCache>,
 )
 {
     // Clean up existing entries to avoid memory leak for spawing/despawning windows.
@@ -39,21 +40,21 @@ fn collect_window_events(
         if !windows.contains(event.window) {
             continue;
         }
-        event_cache.insert_backend_scale_factor_event(event);
+        event_cache.insert_backend_scale_factor_event(*event);
     }
 
     for event in scale_factor_events.read() {
         if !windows.contains(event.window) {
             continue;
         }
-        event_cache.insert_scale_factor_event(event);
+        event_cache.insert_scale_factor_event(*event);
     }
 
     for event in theme_events.read() {
         if !windows.contains(event.window) {
             continue;
         }
-        event_cache.insert_theme_event(event);
+        event_cache.insert_theme_event(*event);
     }
 }
 
@@ -278,7 +279,7 @@ impl Plugin for WorldSwapPlugin
         let maybe_render_app = app.remove_sub_app(RenderApp).or_else(|| app.remove_sub_app(RenderExtractApp));
         let worldswap_subapp = app.sub_app_mut(WorldSwapSubApp);
 
-        worldswap_subapp.insert_resource(ForegroundApp {
+        worldswap_subapp.insert_non_send_resource(ForegroundApp {
             render_app: maybe_render_app,
             // The initial app gets the default background tick rate.
             background_tick_rate: Some(self.background_tick_rate),
@@ -342,7 +343,7 @@ impl PluginGroup for ChildDefaultPlugins
                 ),
                 synchronous_pipeline_compilation: self.synchronous_pipeline_compilation,
             })
-            .add_before::<AssetPlugin>(InsertAssetServerPlugin::new(self.asset_server))
+            .add_before::<AssetPlugin, InsertAssetServerPlugin>(InsertAssetServerPlugin::new(self.asset_server))
             .add(ChildFocusRepairPlugin)
             .disable::<WinitPlugin>()
             .add(ChildWinitPlugin)

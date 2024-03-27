@@ -107,7 +107,7 @@ pub struct WorldSwapApp
     ///
     /// Cached while the world is away from the foreground so its internal time will increment properly. Normally,
     /// worlds that render will have their time sent from [`RenderApp`].
-    pub(crate) time_channel: Option<TimeReceiver>,
+    pub(crate) time_receiver: Option<TimeReceiver>,
     /// The world's [`RenderApp`] or [`RenderExtractApp`].
     ///
     /// Cached while the world is away from the foreground.
@@ -136,12 +136,12 @@ impl WorldSwapApp
         }
         app.finish();
         app.cleanup();
-        let time_channel = app.world.remove_resource::<TimeReceiver>();
+        let time_receiver = app.world.remove_resource::<TimeReceiver>();
         Self {
             world: app.world,
             background_tick_rate: None,
             paused_by_tick_policy: false,
-            time_channel,
+            time_receiver,
             render_app: app.remove_sub_app(RenderApp).or_else(|| app.remove_sub_app(RenderExtractApp)),
         }
     }
