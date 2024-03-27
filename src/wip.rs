@@ -11,6 +11,7 @@ Implementation plan: Swap between worlds that run in the same update loop (and r
     world, so subsequent accesses will be invalid.
         - Add a check with .matches_world(). If not matching, then reinitialize the query states.
     - winit system changed_windows needs to be public
+        - OR, add WinitCorePlugin to encapsulate
 
 - Bevy changes nice-to-have
     - make AudioPlaySet public
