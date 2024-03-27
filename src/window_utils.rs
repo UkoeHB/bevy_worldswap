@@ -64,6 +64,7 @@ impl WindowEventCache {
 
             // Forward to the new world.
             new_world.send_event(event);
+            new_world.send_event(WinitEvent::WindowBackendScaleFactorChanged(event));
         }
 
         for (entity, mut event) in self.scale_factor_events.drain() {
@@ -77,6 +78,7 @@ impl WindowEventCache {
 
             // Forward to the new world.
             new_world.send_event(event);
+            new_world.send_event(WinitEvent::WindowScaleFactorChanged(event));
         }
 
         for (entity, mut event) in self.theme_events.drain() {
@@ -90,6 +92,7 @@ impl WindowEventCache {
 
             // Forward to the new world.
             new_world.send_event(event);
+            new_world.send_event(WinitEvent::WindowThemeChanged(event));
         }
     }
 }

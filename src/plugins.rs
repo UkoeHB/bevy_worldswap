@@ -68,6 +68,29 @@ impl Plugin for InsertAssetServerPlugin {
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
+/// Plugin to use in addition to [`WindowPlugin`] for child worlds.
+///
+/// We need to manually repair the `Focus` resource since the primary window isn't spawned by `WindowPlugin` for child
+/// worlds.
+struct ChildFocusRepairPlugin;
+
+impl Plugin for ChildFocusRepairPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(PreStartup,
+            |mut focus: ResMut<Focus>, primary: Query<Entity, (With<Window>, With<PrimaryWindow>)>|
+            {
+                let Ok(primary) = primary.get_single() else {
+                    return;
+                };
+                **focus = Some(primary);
+            }
+        );
+    }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
 /// Plugin to use instead of [`WinitPlugin`] for child worlds.
 struct ChildWinitPlugin;
 
@@ -112,7 +135,8 @@ pub struct ChildCorePlugin;
 
 impl Plugin for ChildCorePlugin {
     fn build(&self, app: &mut App) {
-        // The WorldSwapStatus is updated in WorldSwapSubApp as needed. We expect child apps won't be updated manually.
+        // The WorldSwapStatus is set in WorldSwapSubApp as needed. We expect child worlds won't be updated manually, so
+        // invalid status shouldn't ever be read.
         app.insert_resource(WorldSwapStatus::Foreground)
             .init_resource(WindowEventCache)
             .add_systems(Last, collect_window_events.in_set(WorldSwapSet));
@@ -135,17 +159,17 @@ pub enum BackgroundTickRate {
     },
     /// The background world updates in every tick that the main world updates.
     EveryTick,
-    /// The background world updates at a fixed tick rate.
-    ///
-    /// The background world won't update more than once per main world tick.
+    // /// The background world updates at a fixed tick rate.
+    // ///
+    // /// The background world won't update more than once per main world tick.
     //todo: TickRate,
-    /// The background world will update once in each main world tick where this callback returns true.
+    // /// The background world will update once in each main world tick where this callback returns true.
     //todo: Custom(callback fn),
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
-pub type SwapEndRecoveryFn = fn(&mut World, WorldSwapApp);
+pub type SwapRecoveryFn = fn(&mut World, WorldSwapApp);
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -166,15 +190,20 @@ pub struct WorldSwapPlugin {
     ///
     /// By default, equals [`BackgroundTickRate::Never`] with `freeze_time = true`.
     pub background_tick_rate: BackgroundTickRate,
+    /// Callback called when a [`SwapCommand::Pass`] is applied.
+    ///
+    /// This allows you to pass data from the passing world to the new world, or even cache the [`WorldSwapApp`]
+    /// and resume it later with [`SwapCommand::Fork`] or [`SwapCommand::Pass`].
+    pub swap_pass_recovery: Option<SwapRecoveryFn>,
     /// Callback called when a [`SwapCommand::Join`] is applied.
     ///
     /// This allows you to pass data from the joining world to the background world, or even cache the [`WorldSwapApp`]
     /// and resume it later with [`SwapCommand::Fork`] or [`SwapCommand::Pass`].
     ///
-    /// Note that time in the world in a [`WorldSwapApp`] passed to [`SwapEndRecoveryFn`] will *not* be paused unless
+    /// Note that time in the world in a [`WorldSwapApp`] passed to [`SwapRecoveryFn`] will *not* be paused unless
     /// you manually pause it. The `freeze_time` option in [`BackgroundTickRate::Never`] only applies to worlds in
     /// the background.
-    pub swap_join_recovery: Option<SwapEndRecoveryFn>,
+    pub swap_join_recovery: Option<SwapRecoveryFn>,
     /// Controls whether then app should shut down when the background world exits.
     ///
     /// This does nothing on [`BackgroundTickRate::Never`].
@@ -184,12 +213,16 @@ pub struct WorldSwapPlugin {
 }
 
 impl Default for WorldSwapPlugin {
-    fn default() -> Self {
-        background_tick_rate: BackgroundTickRate::Never{
-            freeze_time: true,
-        },
-        swap_join_recovery: None,
-        abort_on_background_exit: false,
+    fn default() -> Self
+    {
+        Self {
+            background_tick_rate: BackgroundTickRate::Never{
+                freeze_time: true,
+            },
+            swap_pass_recovery: None,
+            swap_join_recovery: None,
+            abort_on_background_exit: false,
+        }
     }
 }
 
@@ -254,6 +287,20 @@ pub struct ChildDefaultPlugins {
     pub synchronous_pipeline_compilation: bool,
 }
 
+impl ChildDefaultPlugins {
+    pub fn new(world: &mut World) -> Self {
+        Self{
+            asset_server: world.resource::<AssetServer>().clone(),
+            devices: world.resource::<RenderDevices>().clone(),
+            queue: world.resource::<RenderQueue>().clone(),
+            adapter_info: world.resource::<RenderAdapterInfo>().clone(),
+            adapter: world.resource::<RenderAdapter>().clone(),
+            instance: world.resource::<RenderInstance>().clone(),
+            synchronous_pipeline_compilation: false,
+        }
+    }
+}
+
 impl PluginGroup for ChildDefaultPlugins {
     fn build(self) -> PluginGroupBuilder {
         DefaultPlugins::build()
@@ -270,9 +317,10 @@ impl PluginGroup for ChildDefaultPlugins {
                     self.adapter,
                     self.instance
                 ),
-                synchronous_pipeline_compilation = self.synchronous_pipeline_compilation
+                synchronous_pipeline_compilation: self.synchronous_pipeline_compilation
             })
             .add_before::<AssetPlugin>(InsertAssetServerPlugin::new(self.asset_server))
+            .add(ChildFocusRepairPlugin)
             .disable::<WinitPlugin>()
             .add(ChildWinitPlugin)
             .add(ChildCorePlugin)
