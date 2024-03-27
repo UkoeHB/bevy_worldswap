@@ -3,17 +3,14 @@
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Converts [`AppExit`] events into [`SwapCommand::Join`] commands for foreground worlds IF there is a background world.
-fn intercept_app_exit(subapp_world: &World, world: &mut World) {
+fn intercept_app_exit(subapp_world: &World, world: &mut World)
+{
     // No interception if there is no background world.
-    if subapp_world.resource::<BackgroundApp>().app.is_none() {
-        return;
-    }
+    if subapp_world.resource::<BackgroundApp>().app.is_none() { return; }
 
     // Intercept exit events.
-    let exit_events = world.resource_mut::<Events<AppExit>>();
-    if exit_events.is_empty() {
-        return;
-    }
+    let Some(exit_events) = world.get_resource_mut::<Events<AppExit>>() else { return; };
+    if exit_events.is_empty() { return; }
     exit_events.clear();
 
     // Send join command.
@@ -23,8 +20,10 @@ fn intercept_app_exit(subapp_world: &World, world: &mut World) {
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn extract_main_world_render_app(subapp_world: &mut World, main_world: &mut World) {
-    let Some(render_app) = subapp_world.resource_mut::<ForegroundApp>().render_app else {
+fn extract_main_world_render_app(subapp_world: &mut World, main_world: &mut World)
+{
+    let Some(render_app) = subapp_world.resource_mut::<ForegroundApp>().render_app else
+    {
         return;
     };
 
@@ -37,40 +36,48 @@ fn extract_main_world_render_app(subapp_world: &mut World, main_world: &mut Worl
 fn get_background_tick_rate(
     default_tick_rate: BackgroundTickRate,
     background_tick_rate_of_app: Option<BackgroundTickRate>
-) -> BackgroundTickRate {
+) -> BackgroundTickRate
+{
     background_tick_rate_of_app.unwrap_or(default_tick_rate);
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn update_background_world(subapp_world: &mut World) -> bool {
-    if *subapp_world.resource::<WorldSwapSubAppState>() == WorldSwapSubAppState::Exiting {
+fn update_background_world(subapp_world: &mut World) -> bool
+{
+    if *subapp_world.resource::<WorldSwapSubAppState>() == WorldSwapSubAppState::Exiting
+    {
         return true;
     }
 
     let close_on_exit = subapp_world.resource::<WorldSwapPlugin>().abort_on_background_exit;
     let default_tick_rate = subapp_world.resource::<WorldSwapPlugin>().background_tick_rate;
-    let Some(background_app) = subapp_world.resource_mut::<BackgroundApp>().app else {
+    let Some(background_app) = subapp_world.resource_mut::<BackgroundApp>().app else
+    {
         return false;
     };
 
     // Detect AppExit in the background world.
     // - Do this before updating the background world in case AppExit was sent in a previous update.
-    if !background_app.world.resource::<Events<AppExit>>().is_empty() {
+    if !background_app.world.resource::<Events<AppExit>>().is_empty()
+    {
         return close_on_exit;
     }
 
     // Update the background app.
-    match get_background_tick_rate(default_tick_rate, background_app.background_tick_rate) {
+    match get_background_tick_rate(default_tick_rate, background_app.background_tick_rate)
+    {
         BackgroundTickRate::Never{ .. } => (),
-        BackgroundTickRate::EveryTick => {
+        BackgroundTickRate::EveryTick =>
+        {
             background_app.world.run_schedule(Main);
         }
     }
 
     // Check if AppExit was emitted during the update.
-    if !background_app.world.resource::<Events<AppExit>>().is_empty() {
+    if !background_app.world.resource::<Events<AppExit>>().is_empty()
+    {
         return close_on_exit;
     }
 
@@ -80,7 +87,118 @@ fn update_background_world(subapp_world: &mut World) -> bool {
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn transfer_window_entities(main_world: &mut World, new_world: &mut World) {
+fn transfer_windows(main_world: &mut World, new_world: &mut World)
+{
+    // Extract WinitWindows.
+    let Some(main_windows) = main_world.remove_resource::<WinitWindows>() else
+    {
+        return;
+    };
+    let mut new_windows = new_world.remove_resource::<WinitWindows>()
+        .expect("if the main world has WinitWindows, the new world should too");
+
+    // Validate that the new world did not create any windows.
+    if new_windows.windows.len() > 0
+    {
+        panic!("a world that isn't in the foreground created windows");
+    }
+
+    // Move winit windows to the new world.
+    new_windows.windows = std::mem::replace(&mut main_windows.windows, HashMap::default());
+
+    // Despawn window entities in the new world if they don't have windows.
+    for (entity, window_id) in new_windows.entity_to_winit.iter()
+    {
+        if new_windows.windows.contains(window_id)
+        {
+            continue;
+        }
+
+        new_world.despawn(*entity);
+        new_windows.winit_to_entity.remove(window_id);
+    }
+
+    // Synchronize window entities.
+    for (window_id, _) in new_windows.windows.iter()
+    {
+        // Access components from the main world.
+        let Some(main_entity) = main_windows.winit_to_entity.get(window_id) else
+        {
+            tracing::error!("main world is missing an entity for window id {:?}", window_id);
+            continue;
+        };
+        let Some(window) = main_world.get::<Window>(main_entity) else
+        {
+            tracing::error!("main world window entity {:?} is missing a Window component for {:?}", main_entity, window_id);
+            continue;
+        };
+        let maybe_primary = main_world.get::<PrimaryWindow>(main_entity).clone();
+
+        // Handle existing vs new window entities.
+        if let Some(new_entity) = new_windows.winit_to_entity.get(window_id)
+        {
+            // Clone window components into existing window entities in the new world.
+            let mut new_entity = new_world.get_entity_mut(new_entity).unwrap();
+            new_entity.insert(window.clone());
+
+            // Synchronize PrimaryWindow component.
+            if let Some(primary) =>
+            {
+                new_entity.insert(primary);
+            }
+            else
+            {
+                new_entity.remove::<PrimaryWindow>();
+            }
+        }
+        else
+        {
+            // Spawn new window entities in the new world to match unknown window ids.
+            let mut entity_cmds = new_world.spawn(window.clone());
+            if let Some(primary) = maybe_primary
+            {
+                entity_cmds.insert(primary);
+            }
+
+            new_windows.winit_to_entity.insert(*window_id, entity_cmds.id());
+        }
+    }
+
+    // Rebuild entity_to_winit map.
+    new_windows.entity_to_winit.clear();
+    for (window_id, entity) in new_windows.winit_to_entity.iter()
+    {
+        new_windows.entity_to_winit.insert(*entity, *window_id);
+    }
+    debug_assert_eq!(new_windows.entity_to_winit.len(), new_windows.windows.len());
+
+    // Transfer AccessKitAdapters to the new world.
+    if let Some(access_kit) = new_world.remove_non_send_resource::<AccessKitAdapters>()
+    {
+        let new_access_kit = HashMap::default();
+        for (entity, adapter) in access_kit.drain()
+        {
+            let new_entity = map_winit_window_entities(&main_windows, &new_windows, *entity).unwrap();
+            new_access_kit.insert(new_entity, adapter);
+        }
+        new_world.insert_non_send_resource(AccessKitAdapters(new_access_kit));
+    }
+
+    // Transfer WinitActionHandlers to the new world.
+    if let Some(action_handlers) = new_world.remove_resource::<WinitActionHandlers>()
+    {
+        let new_action_handlers = HashMap::default();
+        for (entity, handler) in action_handlers.drain()
+        {
+            let new_entity = map_winit_window_entities(&main_windows, &new_windows, *entity).unwrap();
+            new_action_handlers.insert(new_entity, handler);
+        }
+        new_world.insert_resource(WinitActionHandlers(new_action_handlers));
+    }
+
+    // Return WinitWindows.
+    main_world.insert_resource(main_windows);
+    new_world.insert_resource(new_windows);
 
 /*
 - Update window entities in new world, using WinitWindows maps from each app (use window ids for cross-map)
@@ -102,9 +220,11 @@ fn transfer_window_entities(main_world: &mut World, new_world: &mut World) {
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn drain_cached_window_events(main_world: &mut World, new_world: &mut World) {
+fn drain_cached_window_events(main_world: &mut World, new_world: &mut World)
+{
     // Get WinitWindows for entity mapping.
-    let Some(main_windows) = main_world.remove_resource::<WinitWindows>() else {
+    let Some(main_windows) = main_world.remove_resource::<WinitWindows>() else
+    {
         return;
     };
     let new_windows = new_world.remove_resource::<WinitWindows>()
@@ -122,13 +242,16 @@ fn drain_cached_window_events(main_world: &mut World, new_world: &mut World) {
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn prepare_world_swap(subapp_world: &mut World, main_world: &mut World, new_world: &mut World) {
+fn prepare_world_swap(subapp_world: &mut World, main_world: &mut World, new_world: &mut World)
+{
     // SwapCommandSender is needed in the new world.
     new_world,.insert_resource(subapp_world.resource::<SwapCommandSender>().clone());
 
     // Connect the new world to the winit event loop.
-    if new_world.get_non_send_resource::<EventLoopProxy>().is_none() {
-        if let Some(event_loop_proxy) = main_world.get_non_send_resource::<EventLoopProxy>() {
+    if new_world.get_non_send_resource::<EventLoopProxy>().is_none()
+    {
+        if let Some(event_loop_proxy) = main_world.get_non_send_resource::<EventLoopProxy>()
+        {
             new_world.insert_non_send_resource(event_loop_proxy.clone());
         }
     }
@@ -136,14 +259,16 @@ fn prepare_world_swap(subapp_world: &mut World, main_world: &mut World, new_worl
     // Set the new world's winit settings IF the new world hasn't already specified it.
     // - Users may manually insert different WinitSettings for each world (e.g. WinitSettings::desktop_app for menu,
     // WinitSettings::game for game).
-    if let Some(winit_settings) = main_world.get_resource::<WinitSettings>() {
-        if !new_world.contains_resource::<WinitSettings>() {
+    if let Some(winit_settings) = main_world.get_resource::<WinitSettings>()
+    {
+        if !new_world.contains_resource::<WinitSettings>()
+        {
             new_world.insert_resource(winit_settings.clone());
         }
     }
 
     // Update window entities in the new world.
-    transfer_window_entities(main_world, new_world);
+    transfer_windows(main_world, new_world);
 
     // Drain cached window events into the new world.
     // - This must be done after updating window entities in the new world, so event entities can be mapped properly.
@@ -158,11 +283,13 @@ fn prepare_world_swap(subapp_world: &mut World, main_world: &mut World, new_worl
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn take_background_app(subapp_world: &mut World) -> Option<WorldSwapApp> {
+fn take_background_app(subapp_world: &mut World) -> Option<WorldSwapApp>
+{
     let mut background_app = subapp_world.resource_mut::<BackgroundApp>().app.take()?;
     
     // Restart the background world's virtual clock if it was paused.
-    if background_app.paused_by_tick_policy {
+    if background_app.paused_by_tick_policy
+    {
         background_app.world.resource_mut::<Time<Virtual>>().unpause();
         background_app.paused_by_tick_policy = false;
     }
@@ -173,7 +300,8 @@ fn take_background_app(subapp_world: &mut World) -> Option<WorldSwapApp> {
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn swap_worlds(subapp_world: &mut World, main_world: &mut World, mut new_app: WorldSwapApp) -> WorldSwapApp {
+fn swap_worlds(subapp_world: &mut World, main_world: &mut World, mut new_app: WorldSwapApp) -> WorldSwapApp
+{
     // Swap worlds.
     std::mem::swap(main_world, &mut new_app.world);
 
@@ -183,7 +311,8 @@ fn swap_worlds(subapp_world: &mut World, main_world: &mut World, mut new_app: Wo
     *subapp_world.resource_mut::<ForegroundApp>().background_tick_rate = new_background_tick_rate;
 
     // Swap time receivers.
-    if let Some(time_receiver) = new_app.time_receiver.take() {
+    if let Some(time_receiver) = new_app.time_receiver.take()
+    {
         main_world.insert_resource(time_receiver);
     }
     new_app.time_receiver = new_app.world.remove_resource::<TimeReceiver>();
@@ -203,12 +332,14 @@ fn swap_worlds(subapp_world: &mut World, main_world: &mut World, mut new_app: Wo
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn freeze_time_in_background(subapp_world: &World, background_tick_rate_of_app: Option<BackgroundTickRate>) {
+fn freeze_time_in_background(subapp_world: &World, background_tick_rate_of_app: Option<BackgroundTickRate>)
+{
     let rate = get_background_tick_rate(
         subapp_world.resource::<WorldSwapPlugin>().background_tick_rate,
         background_tick_rate_of_app
     );
-    let BackgroundTickRate::Never{ freeze_time } = rate else {
+    let BackgroundTickRate::Never{ freeze_time } = rate else
+    {
         return false;
     };
 
@@ -218,16 +349,19 @@ fn freeze_time_in_background(subapp_world: &World, background_tick_rate_of_app: 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn add_app_to_background(subapp_world: &mut World, mut background_app: WorldSwapApp) {
+fn add_app_to_background(subapp_world: &mut World, mut background_app: WorldSwapApp)
+{
     // Prep background status.
     *background_app.world.insert_resource(WorldSwapStatus::Background);
 
     // Pause the background app if necessary.
     background_app.paused_by_tick_policy = false;
-    if freeze_time_in_background(subapp_world, background_app.background_tick_rate) {
+    if freeze_time_in_background(subapp_world, background_app.background_tick_rate)
+    {
         let time = background_app.world.resource_mut::<Time<Virtual>>();
 
-        if !time.is_paused() {
+        if !time.is_paused()
+        {
             background_app.world.resource_mut::<Time<Virtual>>().pause();
             background_app.paused_by_tick_policy = true;
         }
@@ -241,8 +375,10 @@ fn add_app_to_background(subapp_world: &mut World, mut background_app: WorldSwap
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn handle_swap_join_recovery(subapp_world: &mut World, main_world: &mut World, joined_app: WorldSwapApp) {
-    let Some(recovery_fn) = subapp_world.resource::<WorldSwapPlugin>().swap_join_recovery else {
+fn handle_swap_join_recovery(subapp_world: &mut World, main_world: &mut World, joined_app: WorldSwapApp)
+{
+    let Some(recovery_fn) = subapp_world.resource::<WorldSwapPlugin>().swap_join_recovery else
+    {
         return;
     };
 
@@ -252,7 +388,8 @@ fn handle_swap_join_recovery(subapp_world: &mut World, main_world: &mut World, j
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn apply_pass(subapp_world: &mut World, main_world: &mut World, mut new_app: WorldSwapApp) {
+fn apply_pass(subapp_world: &mut World, main_world: &mut World, mut new_app: WorldSwapApp)
+{
     tracing::info!("foreground control passed from world {:?} to world {:?}, world {:?} has been dropped",
         main_world.id(), new_app.world.id(), main_world.id());
 
@@ -268,8 +405,10 @@ fn apply_pass(subapp_world: &mut World, main_world: &mut World, mut new_app: Wor
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn apply_fork(subapp_world: &mut World, main_world: &mut World, mut new_app: WorldSwapApp) {
-    if subapp_world.resource::<BackgroundApp>().app.is_some() {
+fn apply_fork(subapp_world: &mut World, main_world: &mut World, mut new_app: WorldSwapApp)
+{
+    if subapp_world.resource::<BackgroundApp>().app.is_some()
+    {
         panic!("SwapCommand::Fork is not allowed when there is already a world in the background");
     }
 
@@ -289,8 +428,10 @@ fn apply_fork(subapp_world: &mut World, main_world: &mut World, mut new_app: Wor
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn apply_swap(subapp_world: &mut World, main_world: &mut World) {
-    if subapp_world.resource::<BackgroundApp>().app.is_none() {
+fn apply_swap(subapp_world: &mut World, main_world: &mut World)
+{
+    if subapp_world.resource::<BackgroundApp>().app.is_none()
+    {
         panic!("SwapCommand::Swap is only allowed when there is a world in the background");
     }
 
@@ -311,8 +452,10 @@ fn apply_swap(subapp_world: &mut World, main_world: &mut World) {
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
-fn apply_join(subapp_world: &mut World, main_world: &mut World) {
-    let Some(mut background_app) = take_background_app(subapp_world) else {
+fn apply_join(subapp_world: &mut World, main_world: &mut World)
+{
+    let Some(mut background_app) = take_background_app(subapp_world) else
+    {
         panic!("SwapCommand::Join is only allowed when there is a world in the background");
     };
     tracing::info!("world {:?} joined, now world {:?} is in the foreground and world {:?} has been recovered or dropped",
@@ -349,7 +492,8 @@ pub(crate) struct BackgroundApp
 //-------------------------------------------------------------------------------------------------------------------
 
 #[derive(Resource, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum WorldSwapSubAppState {
+pub(crate) enum WorldSwapSubAppState
+{
     Running,
     Exiting,
 }
@@ -360,7 +504,8 @@ pub(crate) enum WorldSwapSubAppState {
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, AppLabel)]
 pub struct WorldSwapSubApp;
 
-pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App) {
+pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App)
+{
     let subapp_world = &mut subapp.world;
 
     // Intercept AppExit events from the main world and convert them to SwapCommand::Join commands if possible.
@@ -378,22 +523,27 @@ pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App) {
     // will take precedence.
     let should_exit = update_background_world(subapp_world);
 
-    if should_exit {
+    if should_exit
+    {
         main_world.send_event(AppExit);
         *subapp_world.insert_resource(WorldSwapSubAppState::Exiting);
     }
 
     // Get and apply the most recent SwapCommand.
     let mut swap_command = None;
-    while let Ok(new_swap_command) = subapp_world.resource::<SwapCommandReceiver>().recv() {
-        if swap_command.is_some() {
+    while let Ok(new_swap_command) = subapp_world.resource::<SwapCommandReceiver>().recv()
+    {
+        if swap_command.is_some()
+        {
             tracing::warn!("discarding extra swap command");
         }
         swap_command = Some(new_swap_command);
     }
 
-    if let Some(swap_command) = swap_command {
-        match swap_command {
+    if let Some(swap_command) = swap_command
+    {
+        match swap_command
+        {
             SwapCommand::Pass(new_app) => apply_pass(subapp_world, main_world, new_app),
             SwapCommand::Fork(new_app) => apply_fork(subapp_world, main_world, new_app),
             SwapCommand::Swap => apply_swap(subapp_world, main_world),

@@ -106,6 +106,9 @@ impl WorldSwapApp {
     ///
     /// This method calls [`App::finish`] and [`App::clean`] on the app before removing its contents.
     ///
+    /// The app will have the default background tick rate configured in [`WorldSwapPlugin`]. Use [`Self::new_with`]
+    /// if you want a specific tick rate for this app.
+    ///
     /// ## Panics
     /// - If the app did not add [`ChildCorePlugin`] or [`ChildDefaultPlugins`].
     /// - If the app's [`main_schedule_label`](App::main_schedule_label) is not [`Main`].

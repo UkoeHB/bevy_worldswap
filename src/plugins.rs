@@ -210,7 +210,7 @@ impl Plugin for WorldSwapPlugin {
             .insert_resource(BackgroundApp{ app: None })
             .insert_resource(WorldSwapSubAppState::Running);
 
-        //worldswap_subapp.init_schedule(Main); //todo: is this necessary?
+        worldswap_subapp.init_schedule(Main);
         app.insert_sub_app(WorldSwapSubApp, SubApp::new(worldswap_subapp, world_swap_extract));
 
         // Set up the original App's world as a world-swap child.
