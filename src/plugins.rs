@@ -1,3 +1,8 @@
+use std::sync::{Arc, Mutex};
+
+use crate::*;
+
+use bevy::{a11y::Focus, app::{PluginGroupBuilder, SubApp}, prelude::*, render::{pipelined_rendering::RenderExtractApp, renderer::{RenderAdapter, RenderAdapterInfo, RenderDevice, RenderInstance, RenderQueue}, settings::RenderCreation, RenderApp, RenderPlugin}, window::{ExitCondition, PrimaryWindow, WindowBackendScaleFactorChanged, WindowScaleFactorChanged, WindowThemeChanged}, winit::{accessibility::AccessKitPlugin, WinitPlugin, WinitSettings, WinitWindows}};
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -12,10 +17,10 @@ fn collect_window_events(
 ) {
     // Clean up existing entries to avoid memory leak for spawing/despawning windows.
     for removed in removed_windows.read() {
-        if windows.contains(*removed) {
+        if windows.contains(removed) {
             continue;
         }
-        event_cache.remove(*removed);
+        event_cache.remove(removed);
     }
 
     // Collect events.
@@ -61,7 +66,7 @@ impl InsertAssetServerPlugin {
 
 impl Plugin for InsertAssetServerPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(self.asset_server.lock().unwrap().take().unwrap())
+        app.insert_resource(self.asset_server.lock().unwrap().take().unwrap());
     }
 }
 
@@ -138,7 +143,7 @@ impl Plugin for ChildCorePlugin {
         // The WorldSwapStatus is set in WorldSwapSubApp as needed. We expect child worlds won't be updated manually, so
         // invalid status shouldn't ever be read.
         app.insert_resource(WorldSwapStatus::Foreground)
-            .init_resource(WindowEventCache)
+            .init_resource::<WindowEventCache>()
             .add_systems(Last, collect_window_events.in_set(WorldSwapSet));
     }
 }
@@ -229,7 +234,7 @@ impl Default for WorldSwapPlugin {
 impl Plugin for WorldSwapPlugin {
     fn build(&self, app: &mut App) {
         // Require app uses the `Main` schedule, in order to ensure consistency between the initial app and child apps.
-        if app.main_schedule_label != Main.into() {
+        if app.main_schedule_label != Main.intern() {
             panic!("failed adding WorldSwapPlugin, app's main_schedule_label is not Main");
         }
 
@@ -240,7 +245,7 @@ impl Plugin for WorldSwapPlugin {
             .insert_resource(self.clone())
             .insert_resource(SwapCommandSender(sender.clone()))
             .insert_resource(SwapCommandReceiver(receiver))
-            .insert_resource(BackgroundApp{ app: None })
+            .insert_non_send_resource(BackgroundApp{ app: None })
             .insert_resource(WorldSwapSubAppState::Running);
 
         worldswap_subapp.init_schedule(Main);
@@ -279,7 +284,7 @@ impl Plugin for WorldSwapPlugin {
 /// Don't use this for setting up your initial app. Use [`WorldSwapPlugin`] and [`DefaultPlugins`] instead.
 pub struct ChildDefaultPlugins {
     pub asset_server: AssetServer,
-    pub devices: RenderDevices,
+    pub devices: RenderDevice,
     pub queue: RenderQueue,
     pub adapter_info: RenderAdapterInfo,
     pub adapter: RenderAdapter,
@@ -291,7 +296,7 @@ impl ChildDefaultPlugins {
     pub fn new(world: &mut World) -> Self {
         Self{
             asset_server: world.resource::<AssetServer>().clone(),
-            devices: world.resource::<RenderDevices>().clone(),
+            devices: world.resource::<RenderDevice>().clone(),
             queue: world.resource::<RenderQueue>().clone(),
             adapter_info: world.resource::<RenderAdapterInfo>().clone(),
             adapter: world.resource::<RenderAdapter>().clone(),
@@ -303,7 +308,7 @@ impl ChildDefaultPlugins {
 
 impl PluginGroup for ChildDefaultPlugins {
     fn build(self) -> PluginGroupBuilder {
-        DefaultPlugins::build()
+        DefaultPlugins.build()
             .set(WindowPlugin {
                 primary_window: None,
                 exit_condition: ExitCondition::OnAllClosed,

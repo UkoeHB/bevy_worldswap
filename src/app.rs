@@ -1,4 +1,7 @@
+use bevy::{app::SubApp, prelude::*, render::{pipelined_rendering::RenderExtractApp, RenderApp}, time::TimeReceiver};
+use bevy::ecs::schedule::ScheduleLabel;
 
+use crate::*;
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -46,7 +49,7 @@ pub enum SwapCommand {
 /// Only the last swap command sent during a tick will be applied. If a foreground and background world send commands
 /// in the same tick, then the background command will take precedence.
 #[derive(Resource, Clone, Deref)]
-pub struct SwapCommandSender(crossbeam::channel::Sender<SwapCommand>);
+pub struct SwapCommandSender(pub(crate) crossbeam::channel::Sender<SwapCommand>);
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -54,7 +57,7 @@ pub struct SwapCommandSender(crossbeam::channel::Sender<SwapCommand>);
 ///
 /// Only used in [`WorldSwapSubApp`].
 #[derive(Resource, Deref)]
-pub(crate) struct SwapCommandReceiver(crossbeam::channel::Receiver<SwapCommand>);
+pub(crate) struct SwapCommandReceiver(pub(crate) crossbeam::channel::Receiver<SwapCommand>);
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -94,7 +97,7 @@ pub struct WorldSwapApp {
     ///
     /// Cached while the world is away from the foreground so its internal time will increment properly. Normally,
     /// worlds that render will have their time sent from [`RenderApp`].
-    pub(crate) time_channel: Option<Res<TimeReceiver>>,
+    pub(crate) time_channel: Option<TimeReceiver>,
     /// The world's [`RenderApp`] or [`RenderExtractApp`].
     ///
     /// Cached while the world is away from the foreground.
@@ -104,7 +107,7 @@ pub struct WorldSwapApp {
 impl WorldSwapApp {
     /// Creates a new world-swap wrapper for a fresh [`App`].
     ///
-    /// This method calls [`App::finish`] and [`App::clean`] on the app before removing its contents.
+    /// This method calls [`App::finish`] and [`App::cleanup`] on the app before removing its contents.
     ///
     /// The app will have the default background tick rate configured in [`WorldSwapPlugin`]. Use [`Self::new_with`]
     /// if you want a specific tick rate for this app.
@@ -116,11 +119,11 @@ impl WorldSwapApp {
         if !app.world.contains_resource::<WorldSwapStatus>() {
             panic!("failed making WorldSwapApp, app did not use ChildCorePlugin");
         }
-        if app.main_schedule_label != Main.into() {
+        if app.main_schedule_label != Main.intern() {
             panic!("failed making WorldSwapApp, app's main_schedule_label is not Main");
         }
         app.finish();
-        app.clean();
+        app.cleanup();
         let time_channel = app.world.remove_resource::<TimeReceiver>();
         Self{
             world: app.world,

@@ -1,3 +1,6 @@
+use crate::*;
+
+use bevy::{app::{AppExit, AppLabel, SubApp}, prelude::*, time::TimeReceiver, utils::HashMap, window::{PrimaryWindow, RawHandleWrapper, WindowCreated}, winit::{accessibility::{AccessKitAdapters, WinitActionHandlers}, EventLoopProxy, WinitSettings, WinitWindows}};
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -6,10 +9,10 @@
 fn intercept_app_exit(subapp_world: &World, world: &mut World)
 {
     // No interception if there is no background world.
-    if subapp_world.resource::<BackgroundApp>().app.is_none() { return; }
+    if subapp_world.non_send_resource::<BackgroundApp>().app.is_none() { return; }
 
     // Intercept exit events.
-    let Some(exit_events) = world.get_resource_mut::<Events<AppExit>>() else { return; };
+    let Some(mut exit_events) = world.get_resource_mut::<Events<AppExit>>() else { return; };
     if exit_events.is_empty() { return; }
     exit_events.clear();
 
@@ -22,7 +25,7 @@ fn intercept_app_exit(subapp_world: &World, world: &mut World)
 
 fn extract_main_world_render_app(subapp_world: &mut World, main_world: &mut World)
 {
-    let Some(render_app) = subapp_world.resource_mut::<ForegroundApp>().render_app else
+    let Some(mut render_app) = subapp_world.resource_mut::<ForegroundApp>().render_app else
     {
         return;
     };
@@ -38,7 +41,7 @@ fn get_background_tick_rate(
     background_tick_rate_of_app: Option<BackgroundTickRate>
 ) -> BackgroundTickRate
 {
-    background_tick_rate_of_app.unwrap_or(default_tick_rate);
+    background_tick_rate_of_app.unwrap_or(default_tick_rate)
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -53,7 +56,7 @@ fn update_background_world(subapp_world: &mut World) -> bool
 
     let close_on_exit = subapp_world.resource::<WorldSwapPlugin>().abort_on_background_exit;
     let default_tick_rate = subapp_world.resource::<WorldSwapPlugin>().background_tick_rate;
-    let Some(background_app) = subapp_world.resource_mut::<BackgroundApp>().app else
+    let Some(mut background_app) = subapp_world.non_send_resource_mut::<BackgroundApp>().app else
     {
         return false;
     };
@@ -273,15 +276,15 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
 fn drain_cached_window_events(main_world: &mut World, new_world: &mut World)
 {
     // Get WinitWindows for entity mapping.
-    let Some(main_windows) = main_world.remove_resource::<WinitWindows>() else
+    let Some(mut main_windows) = main_world.remove_resource::<WinitWindows>() else
     {
         return;
     };
-    let new_windows = new_world.remove_resource::<WinitWindows>()
+    let mut new_windows = new_world.remove_resource::<WinitWindows>()
         .expect("if main world has WinitWindows, new worlds should too");
 
     // Send window events
-    let main_window_events = main_world.resource_mut::<WindowEventCache>();
+    let mut main_window_events = main_world.resource_mut::<WindowEventCache>();
     main_window_events.dispatch(&mut main_windows, &mut new_windows, new_world);
 
     // Put WinitWindows back.
@@ -295,7 +298,7 @@ fn drain_cached_window_events(main_world: &mut World, new_world: &mut World)
 fn prepare_world_swap(subapp_world: &mut World, main_world: &mut World, new_world: &mut World)
 {
     // SwapCommandSender is needed in the new world.
-    new_world,.insert_resource(subapp_world.resource::<SwapCommandSender>().clone());
+    new_world.insert_resource(subapp_world.resource::<SwapCommandSender>().clone());
 
     // Connect the new world to the winit event loop.
     if new_world.get_non_send_resource::<EventLoopProxy>().is_none()
@@ -335,7 +338,7 @@ fn prepare_world_swap(subapp_world: &mut World, main_world: &mut World, new_worl
 
 fn take_background_app(subapp_world: &mut World) -> Option<WorldSwapApp>
 {
-    let mut background_app = subapp_world.resource_mut::<BackgroundApp>().app.take()?;
+    let mut background_app = subapp_world.non_send_resource_mut::<BackgroundApp>().app.take()?;
     
     // Restart the background world's virtual clock if it was paused.
     if background_app.paused_by_tick_policy
@@ -361,7 +364,7 @@ fn swap_worlds(subapp_world: &mut World, main_world: &mut World, mut new_app: Wo
     *subapp_world.resource_mut::<ForegroundApp>().background_tick_rate = new_background_tick_rate;
 
     // Note: `paused_by_tick_policy` is handled by `take_background_app` and `add_app_to_background`.
-    debug_assert_false!(new_app.paused_by_tick_policy);
+    debug_assert!(!new_app.paused_by_tick_policy);
 
     // Swap time receivers.
     if let Some(time_receiver) = new_app.time_receiver.take()
@@ -422,7 +425,7 @@ fn add_app_to_background(subapp_world: &mut World, mut background_app: WorldSwap
     }
 
     // Insert the background app.
-    let prev_background = *subapp_world.resource_mut::<BackgroundApp>().app.replace(background_app);
+    let prev_background = *subapp_world.non_send_resource_mut::<BackgroundApp>().app.replace(background_app);
     assert!(prev_background.is_none());
 }
 
@@ -475,7 +478,7 @@ fn apply_pass(subapp_world: &mut World, main_world: &mut World, mut new_app: Wor
 
 fn apply_fork(subapp_world: &mut World, main_world: &mut World, mut new_app: WorldSwapApp)
 {
-    if subapp_world.resource::<BackgroundApp>().app.is_some()
+    if subapp_world.non_send_resource::<BackgroundApp>().app.is_some()
     {
         panic!("SwapCommand::Fork is not allowed when there is already a world in the background");
     }
@@ -498,7 +501,7 @@ fn apply_fork(subapp_world: &mut World, main_world: &mut World, mut new_app: Wor
 
 fn apply_swap(subapp_world: &mut World, main_world: &mut World)
 {
-    if subapp_world.resource::<BackgroundApp>().app.is_none()
+    if subapp_world.non_send_resource::<BackgroundApp>().app.is_none()
     {
         panic!("SwapCommand::Swap is only allowed when there is a world in the background");
     }
@@ -551,7 +554,6 @@ pub(crate) struct ForegroundApp
 
 //-------------------------------------------------------------------------------------------------------------------
 
-#[derive(Resource)]
 pub(crate) struct BackgroundApp
 {
     pub(crate) app: Option<WorldSwapApp>,
