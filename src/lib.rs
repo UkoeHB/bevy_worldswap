@@ -11,9 +11,9 @@ mod subapp;
 mod window_utils;
 
 //API exports
+pub(crate) use crate::prelude::*;
 pub(crate) use crate::subapp::*;
 pub(crate) use crate::window_utils::*;
-pub(crate) use crate::prelude::*;
 
 pub mod prelude
 {

@@ -1,5 +1,9 @@
-use bevy::{app::SubApp, prelude::*, render::{pipelined_rendering::RenderExtractApp, RenderApp}, time::TimeReceiver};
+use bevy::app::SubApp;
 use bevy::ecs::schedule::ScheduleLabel;
+use bevy::prelude::*;
+use bevy::render::pipelined_rendering::RenderExtractApp;
+use bevy::render::RenderApp;
+use bevy::time::TimeReceiver;
 
 use crate::*;
 
@@ -7,16 +11,18 @@ use crate::*;
 
 /// Command that can be sent with [`SwapCommandSender`] to control which world is running.
 ///
-/// Swap commands provide a simple 1-layer 'fork-join' pattern. Use [`Self::Fork`] in the initial world to put it in the
-/// background and run another world in the foreground. Use [`Self::Pass`] to drop the foreground world and run another world
-/// in the foreground. Use [`Self::Join`] to drop the foreground world and put the background world in the foreground.
+/// Swap commands provide a simple 1-layer 'fork-join' pattern. Use [`Self::Fork`] in the initial world to put it
+/// in the background and run another world in the foreground. Use [`Self::Pass`] to drop the foreground world and
+/// run another world in the foreground. Use [`Self::Join`] to drop the foreground world and put the background
+/// world in the foreground.
 ///
 /// Both the foreground and background worlds can send [`Self::Pass`], [`Self::Swap`], and [`Self::Join`] commands.
 /// Only foreground worlds can send [`Self::Fork`], and only if there is no background world.
 ///
-/// Note that when a world is dropped due to [`Self::Pass`] or [`Self::Join`], an [`AppExit`] event will not be sent to that
-/// world unless the world generated the event itself.
-pub enum SwapCommand {
+/// Note that when a world is dropped due to [`Self::Pass`] or [`Self::Join`], an [`AppExit`] event will not be
+/// sent to that world unless the world generated the event itself.
+pub enum SwapCommand
+{
     /// Swap in another app's world and drop the current world.
     Pass(WorldSwapApp),
     /// Swap in another app's world and put the current world in the background.
@@ -46,8 +52,8 @@ pub enum SwapCommand {
 
 /// Resource for sending [`SwapCommands`](SwapCommand).
 ///
-/// Only the last swap command sent during a tick will be applied. If a foreground and background world send commands
-/// in the same tick, then the background command will take precedence.
+/// Only the last swap command sent during a tick will be applied. If a foreground and background world send
+/// commands in the same tick, then the background command will take precedence.
 #[derive(Resource, Clone, Deref)]
 pub struct SwapCommandSender(pub(crate) crossbeam::channel::Sender<SwapCommand>);
 
@@ -65,14 +71,16 @@ pub(crate) struct SwapCommandReceiver(pub(crate) crossbeam::channel::Receiver<Sw
 ///
 /// This is controlled internally by [`WorldSwapSubApp`].
 #[derive(Resource, Copy, Clone, Eq, PartialEq)]
-pub enum WorldSwapStatus {
+pub enum WorldSwapStatus
+{
     /// The world is suspended.
     Suspended,
     /// The world is running in the foreground.
     Foreground,
     /// The world is running in the background.
     ///
-    /// Note that the background world may not update if [`BackgroundTickRate::Never`] is configured in [`WorldSwapPlugin`].
+    /// Note that the background world may not update if [`BackgroundTickRate::Never`] is configured in
+    /// [`WorldSwapPlugin`].
     Background,
 }
 
@@ -80,9 +88,11 @@ pub enum WorldSwapStatus {
 
 /// Stores a [`World`] that is not in the foreground.
 ///
-/// The world might be [`Suspended`](WorldSwapStatus::Suspended) or in the [`Background`](WorldSwapStatus::Background).
+/// The world might be [`Suspended`](WorldSwapStatus::Suspended) or in the
+/// [`Background`](WorldSwapStatus::Background).
 //todo: configure with bevy_render flag
-pub struct WorldSwapApp {
+pub struct WorldSwapApp
+{
     /// The stored world.
     pub world: World,
     /// This world's tick policy when it is in the background.
@@ -104,28 +114,32 @@ pub struct WorldSwapApp {
     pub(crate) render_app: Option<SubApp>,
 }
 
-impl WorldSwapApp {
+impl WorldSwapApp
+{
     /// Creates a new world-swap wrapper for a fresh [`App`].
     ///
     /// This method calls [`App::finish`] and [`App::cleanup`] on the app before removing its contents.
     ///
-    /// The app will have the default background tick rate configured in [`WorldSwapPlugin`]. Use [`Self::new_with`]
-    /// if you want a specific tick rate for this app.
+    /// The app will have the default background tick rate configured in [`WorldSwapPlugin`]. Use
+    /// [`Self::new_with`] if you want a specific tick rate for this app.
     ///
     /// ## Panics
     /// - If the app did not add [`ChildCorePlugin`] or [`ChildDefaultPlugins`].
     /// - If the app's [`main_schedule_label`](App::main_schedule_label) is not [`Main`].
-    pub fn new(mut app: App) -> Self {
-        if !app.world.contains_resource::<WorldSwapStatus>() {
+    pub fn new(mut app: App) -> Self
+    {
+        if !app.world.contains_resource::<WorldSwapStatus>()
+        {
             panic!("failed making WorldSwapApp, app did not use ChildCorePlugin");
         }
-        if app.main_schedule_label != Main.intern() {
+        if app.main_schedule_label != Main.intern()
+        {
             panic!("failed making WorldSwapApp, app's main_schedule_label is not Main");
         }
         app.finish();
         app.cleanup();
         let time_channel = app.world.remove_resource::<TimeReceiver>();
-        Self{
+        Self {
             world: app.world,
             background_tick_rate: None,
             paused_by_tick_policy: false,
@@ -137,7 +151,8 @@ impl WorldSwapApp {
     /// Creates a new world-swap wrapper for a fresh [`App`] with a specific [`BackgroundTickRate`].
     ///
     /// See [`Self::new`].
-    pub fn new_with(mut app: App, background_tick_rate: BackgroundTickRate) -> Self {
+    pub fn new_with(mut app: App, background_tick_rate: BackgroundTickRate) -> Self
+    {
         let mut app = Self::new(app);
         app.background_tick_rate = Some(background_tick_rate);
         app
