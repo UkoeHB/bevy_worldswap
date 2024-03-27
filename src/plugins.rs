@@ -27,38 +27,30 @@ fn collect_window_events(
 )
 {
     // Clean up existing entries to avoid memory leak for spawing/despawning windows.
-    for removed in removed_windows.read()
-    {
-        if windows.contains(removed)
-        {
+    for removed in removed_windows.read() {
+        if windows.contains(removed) {
             continue;
         }
         event_cache.remove(removed);
     }
 
     // Collect events.
-    for event in backend_scale_factor_events.read()
-    {
-        if !windows.contains(event.window)
-        {
+    for event in backend_scale_factor_events.read() {
+        if !windows.contains(event.window) {
             continue;
         }
         event_cache.insert_backend_scale_factor_event(event);
     }
 
-    for event in scale_factor_events.read()
-    {
-        if !windows.contains(event.window)
-        {
+    for event in scale_factor_events.read() {
+        if !windows.contains(event.window) {
             continue;
         }
         event_cache.insert_scale_factor_event(event);
     }
 
-    for event in theme_events.read()
-    {
-        if !windows.contains(event.window)
-        {
+    for event in theme_events.read() {
+        if !windows.contains(event.window) {
             continue;
         }
         event_cache.insert_theme_event(event);
@@ -106,11 +98,7 @@ impl Plugin for ChildFocusRepairPlugin
         app.add_systems(
             PreStartup,
             |mut focus: ResMut<Focus>, primary: Query<Entity, (With<Window>, With<PrimaryWindow>)>| {
-                let Ok(primary) = primary.get_single()
-                else
-                {
-                    return;
-                };
+                let Ok(primary) = primary.get_single() else { return };
                 **focus = Some(primary);
             },
         );
@@ -258,8 +246,7 @@ impl Plugin for WorldSwapPlugin
     {
         // Require app uses the `Main` schedule, in order to ensure consistency between the initial app and child
         // apps.
-        if app.main_schedule_label != Main.intern()
-        {
+        if app.main_schedule_label != Main.intern() {
             panic!("failed adding WorldSwapPlugin, app's main_schedule_label is not Main");
         }
 
@@ -283,8 +270,7 @@ impl Plugin for WorldSwapPlugin
     fn cleanup(&self, app: &mut App)
     {
         // Panic if bevy/bevy_render feature is enabled but render subapps haven't been consolidated.
-        if app.get_sub_app(RenderApp).is_ok() && app.get_sub_app(RenderExtractApp).is_ok()
-        {
+        if app.get_sub_app(RenderApp).is_ok() && app.get_sub_app(RenderExtractApp).is_ok() {
             panic!("failed removing render subapp, WorldSwapPlugin must be added after DefaultPlugins");
         }
 

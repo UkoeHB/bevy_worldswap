@@ -14,15 +14,11 @@ fn load_demo_file(asset_server: Res<AssetServer>, mut pending: ResMut<PendingDem
 /// The loader app checks to see if the demo file has been loaded, then saves it.
 fn poll_for_asset(mut assets: ResMut<Assets<DemoString>>, mut pending: ResMut<PendingDemoString>)
 {
-    let PendingDemoString::Handle(handle) = *pending
-    else
-    {
+    let PendingDemoString::Handle(handle) = *pending else {
         return;
     };
 
-    let Some(demo_string) = assets.remove(handle)
-    else
-    {
+    let Some(demo_string) = assets.remove(handle) else {
         return;
     };
 
@@ -37,16 +33,13 @@ fn poll_for_asset(mut assets: ResMut<Assets<DemoString>>, mut pending: ResMut<Pe
 /// immediately available to the target app.
 fn try_finish_loading(mut pending: ResMut<PendingDemoString>, swap_commands: Res<SwapCommandSender>)
 {
-    let Some(string) = pending.take_string()
-    else
-    {
+    let Some(string) = pending.take_string() else {
         return;
     };
 
     tracing::info!("Loader: {:?}", string);
 
-    for _ in 1..2
-    {
+    for _ in 1..2 {
         // x
     }
 
@@ -99,11 +92,9 @@ impl PendingDemoString
     fn take_string(&mut self) -> Option<String>
     {
         let prev = std::mem::replace(self, Self::Empty);
-        match prev
-        {
+        match prev {
             Self::String(string) => Some(string),
-            Self::Handle(_) =>
-            {
+            Self::Handle(_) => {
                 *self = prev;
                 None
             }

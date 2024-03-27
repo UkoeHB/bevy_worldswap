@@ -56,12 +56,9 @@ impl WindowEventCache
         new_world: &mut World,
     )
     {
-        for (entity, mut event) in self.backend_scale_factor_events.drain()
-        {
+        for (entity, mut event) in self.backend_scale_factor_events.drain() {
             // Drop events that don't have matching entities.
-            let Some(new_world_entity) = map_winit_window_entities(main_windows, new_windows, entity)
-            else
-            {
+            let Some(new_world_entity) = map_winit_window_entities(main_windows, new_windows, entity) else {
                 continue;
             };
 
@@ -73,12 +70,9 @@ impl WindowEventCache
             new_world.send_event(WinitEvent::WindowBackendScaleFactorChanged(event));
         }
 
-        for (entity, mut event) in self.scale_factor_events.drain()
-        {
+        for (entity, mut event) in self.scale_factor_events.drain() {
             // Drop events that don't have matching entities.
-            let Some(new_world_entity) = map_winit_window_entities(main_windows, new_windows, entity)
-            else
-            {
+            let Some(new_world_entity) = map_winit_window_entities(main_windows, new_windows, entity) else {
                 continue;
             };
 
@@ -90,12 +84,9 @@ impl WindowEventCache
             new_world.send_event(WinitEvent::WindowScaleFactorChanged(event));
         }
 
-        for (entity, mut event) in self.theme_events.drain()
-        {
+        for (entity, mut event) in self.theme_events.drain() {
             // Drop events that don't have matching entities.
-            let Some(new_world_entity) = map_winit_window_entities(main_windows, new_windows, entity)
-            else
-            {
+            let Some(new_world_entity) = map_winit_window_entities(main_windows, new_windows, entity) else {
                 continue;
             };
 

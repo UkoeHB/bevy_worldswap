@@ -40,12 +40,10 @@ pub fn entered_background(mut prev: Local<Option<WorldSwapStatus>>, status: Res<
     let last = *prev;
     *prev = Some(*status);
 
-    if *status != WorldSwapStatus::Background
-    {
+    if *status != WorldSwapStatus::Background {
         return false;
     }
-    if last == Some(*status)
-    {
+    if last == Some(*status) {
         return false;
     }
     true
@@ -65,12 +63,10 @@ pub fn entered_foreground(mut prev: Local<Option<WorldSwapStatus>>, status: Res<
     let last = *prev;
     *prev = Some(*status);
 
-    if *status != WorldSwapStatus::Foreground
-    {
+    if *status != WorldSwapStatus::Foreground {
         return false;
     }
-    if last == Some(*status)
-    {
+    if last == Some(*status) {
         return false;
     }
     true

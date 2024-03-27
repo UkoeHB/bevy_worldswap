@@ -1,12 +1,13 @@
 unstable_features = true
 
 brace_style = "AlwaysNextLine"
-control_brace_style = "AlwaysNextLine"
+control_brace_style = "AlwaysSameLine"
 
 imports_granularity = "Module"
 group_imports = "StdExternalCrate"
 
 use_field_init_shorthand = true
+skip_macro_invocations = ["*"]
 
 comment_width = 115
 wrap_comments = true

@@ -128,12 +128,10 @@ impl WorldSwapApp
     /// - If the app's [`main_schedule_label`](App::main_schedule_label) is not [`Main`].
     pub fn new(mut app: App) -> Self
     {
-        if !app.world.contains_resource::<WorldSwapStatus>()
-        {
+        if !app.world.contains_resource::<WorldSwapStatus>() {
             panic!("failed making WorldSwapApp, app did not use ChildCorePlugin");
         }
-        if app.main_schedule_label != Main.intern()
-        {
+        if app.main_schedule_label != Main.intern() {
             panic!("failed making WorldSwapApp, app's main_schedule_label is not Main");
         }
         app.finish();
