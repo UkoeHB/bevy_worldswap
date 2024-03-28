@@ -254,6 +254,17 @@ impl Plugin for WorldSwapPlugin
             .insert_resource(WorldSwapStatus::Foreground);
     }
 
+    fn finish(&self, app: &mut App)
+    {
+        // Transfer RenderInstance from the RenderApp to our main app so it can be transmitted to new apps.
+        // - We do this in Plugin::finish because the RenderInstance is inserted to RenderApp in this method.
+        if let Ok(render_app) = app.get_sub_app(RenderApp) {
+            let render_instance = render_app.world.get_resource::<RenderInstance>()
+                .expect("WorldSwapPlugin must be added **AFTER** RenderPlugin");
+            app.insert_resource(render_instance.clone());
+        }
+    }
+
     fn cleanup(&self, app: &mut App)
     {
         // Panic if bevy/bevy_render feature is enabled but render subapps haven't been consolidated.
@@ -261,8 +272,10 @@ impl Plugin for WorldSwapPlugin
             panic!("failed removing render subapp, WorldSwapPlugin must be added after DefaultPlugins");
         }
 
-        // Add the current world as the foreground app in the world-swap subapp.
+        // Get the render app.
         let maybe_render_app = app.remove_sub_app(RenderApp).or_else(|| app.remove_sub_app(RenderExtractApp));
+
+        // Add the current world as the foreground app in the world-swap subapp.
         let worldswap_subapp = app.sub_app_mut(WorldSwapSubApp);
 
         worldswap_subapp.insert_non_send_resource(ForegroundApp {

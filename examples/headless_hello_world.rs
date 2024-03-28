@@ -1,4 +1,4 @@
-//! Demonstrates passing an asset from one world to another in a headless app.
+//! Demonstrates loading an asset in one world then passing it to another world.
 
 use bevy::app::AppExit;
 use bevy::asset::io::Reader;
@@ -23,13 +23,8 @@ fn load_demo_file(asset_server: Res<AssetServer>, mut pending: ResMut<PendingDem
 /// The loader app checks to see if the demo file has been loaded, then saves it.
 fn poll_for_asset(mut assets: ResMut<Assets<DemoString>>, mut pending: ResMut<PendingDemoString>)
 {
-    let PendingDemoString::Handle(handle) = &*pending else {
-        return;
-    };
-
-    let Some(demo_string) = assets.remove(handle) else {
-        return;
-    };
+    let PendingDemoString::Handle(handle) = &*pending else { return };
+    let Some(demo_string) = assets.remove(handle) else { return };
 
     *pending = PendingDemoString::String(demo_string);
 }
@@ -42,17 +37,15 @@ fn poll_for_asset(mut assets: ResMut<Assets<DemoString>>, mut pending: ResMut<Pe
 /// immediately available to the target app.
 fn try_finish_loading(mut pending: ResMut<PendingDemoString>, swap_commands: Res<SwapCommandSender>)
 {
-    let Some(string) = pending.take_string() else {
-        return;
-    };
+    let Some(demo_string) = pending.take_string() else { return };
 
-    tracing::info!("Loader: {:?}", string);
+    tracing::info!("Loader: {:?}", demo_string);
 
     // Prepare the target app. If the target app needs access to AssetServer, then
     // we'd need to clone the asset server from the loader app and insert that as a resource before AssetPlugin.
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
-        .insert_resource(string)
+        .insert_resource(demo_string)
         .add_systems(Startup, |string: Res<DemoString>| {
             tracing::info!("App: {:?}", *string);
         })
@@ -61,12 +54,12 @@ fn try_finish_loading(mut pending: ResMut<PendingDemoString>, swap_commands: Res
         });
 
     // Pass control to the target app. The loader app will be dropped.
-    swap_commands.send(SwapCommand::Pass(WorldSwapApp::new(app))).unwrap();
+    swap_commands.send(SwapCommand::Pass(WorldSwapApp::new(app)));
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Initialize and run the 'loader' world.
+/// Initializes and runs the 'loader' world.
 fn main()
 {
     App::new()

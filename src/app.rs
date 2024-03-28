@@ -54,8 +54,18 @@ pub enum SwapCommand
 ///
 /// Only the last swap command sent during a tick will be applied. If a foreground and background world send
 /// commands in the same tick, then the background command will take precedence.
-#[derive(Resource, Clone, Deref)]
+#[derive(Resource, Clone)]
 pub struct SwapCommandSender(pub(crate) crossbeam::channel::Sender<SwapCommand>);
+
+impl SwapCommandSender
+{
+    /// Sends a [`SwapCommand`] to the `bevy_worldswap` backend.
+    pub fn send(&self, command: SwapCommand)
+    {
+        // Ignore errors.
+        let _ = self.0.send(command);
+    }
+}
 
 //-------------------------------------------------------------------------------------------------------------------
 

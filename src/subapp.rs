@@ -30,7 +30,7 @@ fn intercept_app_exit(subapp_world: &World, world: &mut World)
     exit_events.clear();
 
     // Send join command.
-    subapp_world.resource::<SwapCommandSender>().send(SwapCommand::Join).unwrap();
+    subapp_world.resource::<SwapCommandSender>().send(SwapCommand::Join);
 
     tracing::info!("converted AppExit from {:?} into SwapCommand::Join", world.id());
 }
