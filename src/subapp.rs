@@ -510,8 +510,9 @@ pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App)
 
     // Extract the main world into its rendering subapp.
     // - We do this inside the world-swap app to ensure rendering extraction synchronizes with swapping worlds.
-    //   It's
-    // also useful for isolating render subapp swaps within the world-swap subapp.
+    // It's also useful for isolating render subapp swaps within the world-swap subapp.
+    //todo: Consider not rendering the last frame when a foreground world is moved to the background. This way
+    // visual effects of the transition (e.g. changing menu buttons from "Play" to "Resume" won't be shown).
     extract_main_world_render_app(subapp_world, main_world);
 
     // Update the background world.

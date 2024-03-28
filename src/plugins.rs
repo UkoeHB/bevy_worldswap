@@ -259,7 +259,9 @@ impl Plugin for WorldSwapPlugin
         // Transfer RenderInstance from the RenderApp to our main app so it can be transmitted to new apps.
         // - We do this in Plugin::finish because the RenderInstance is inserted to RenderApp in this method.
         if let Ok(render_app) = app.get_sub_app(RenderApp) {
-            let render_instance = render_app.world.get_resource::<RenderInstance>()
+            let render_instance = render_app
+                .world
+                .get_resource::<RenderInstance>()
                 .expect("WorldSwapPlugin must be added **AFTER** RenderPlugin");
             app.insert_resource(render_instance.clone());
         }

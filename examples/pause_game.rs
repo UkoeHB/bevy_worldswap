@@ -1,7 +1,8 @@
 //! Demonstrates play/pause functionality with separate menu and game worlds.
 
+use bevy::app::AppExit;
+use bevy::prelude::*;
 use bevy_worldswap::prelude::*;
-use bevy::{app::AppExit, prelude::*};
 
 //Main menu -> start game (displays timer) -> return to main menu -> return to game -> exit game.
 
@@ -9,7 +10,7 @@ use bevy::{app::AppExit, prelude::*};
 
 fn handle_pause_button_input(
     swap_commands: Res<SwapCommandSender>,
-    button: Query<&Interaction, (Changed<Interaction>, With<PauseButton>)>
+    button: Query<&Interaction, (Changed<Interaction>, With<PauseButton>)>,
 )
 {
     let Ok(interaction) = button.get_single() else { return };
@@ -23,29 +24,65 @@ fn handle_pause_button_input(
 
 fn handle_exit_button_input(
     mut exit: EventWriter<AppExit>,
-    button: Query<&Interaction, (Changed<Interaction>, With<ExitButton>)>
+    button: Query<&Interaction, (Changed<Interaction>, With<ExitButton>)>,
 )
 {
     let Ok(interaction) = button.get_single() else { return };
     let Interaction::Pressed = *interaction else { return };
 
-    // Shut down the game world. The menu world will be put into the foreground, and the game world will be recovered.
+    // Shut down the game world. The menu world will be put into the foreground, and the game world will be
+    // recovered.
     exit.send(AppExit);
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
-fn add_game_buttons()
+fn add_game_buttons(mut commands: Commands)
 {
+    let button_bundle = ButtonBundle {
+        style: Style {
+            width: Val::Px(250.0),
+            height: Val::Px(65.0),
+            margin: UiRect::all(Val::Px(20.0)),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        image: UiImage::default().with_color(Color::WHITE),
+        ..default()
+    };
+    let text_style = TextStyle { font_size: 80.0, color: Color::BLACK, ..default() };
+    let text_position_style = Style { margin: UiRect::all(Val::Px(50.0)), ..default() };
 
+    commands.spawn(Camera2dBundle::default());
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|parent| {
+            parent.spawn(button_bundle.clone()).insert(PauseButton).with_children(|parent| {
+                parent.spawn(
+                    TextBundle::from_section("Pause", text_style.clone()).with_style(text_position_style.clone()),
+                );
+            });
+        })
+        .with_children(|parent| {
+            parent.spawn(button_bundle).insert(ExitButton).with_children(|parent| {
+                parent.spawn(TextBundle::from_section("Exit", text_style).with_style(text_position_style));
+            });
+        });
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
-fn add_timer()
-{
-
-}
+fn add_timer() {}
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -75,6 +112,8 @@ fn start_the_game(world: &mut World)
     world.resource::<SwapCommandSender>().send(SwapCommand::Fork(WorldSwapApp::new(game_app)));
 
     // The button will display "Resume" until the game app joins back with the menu.
+    // - Note that "Resume" will display for one frame before the game starts because the last frame that renders
+    // for the menu world will have the updated button text.
     *world.resource_mut::<MenuButtonState>() = MenuButtonState::Resume;
 }
 
@@ -107,8 +146,7 @@ fn handle_menu_button_input(
     let Ok(interaction) = button.get_single() else { return };
     let Interaction::Pressed = *interaction else { return };
 
-    match *state
-    {
+    match *state {
         MenuButtonState::Start => commands.add(start_the_game),
         MenuButtonState::Resume => commands.add(resume_the_game),
     }
@@ -118,14 +156,12 @@ fn handle_menu_button_input(
 
 fn update_menu_button_text(state: Res<MenuButtonState>, mut text: Query<&mut Text, With<MenuButtonText>>)
 {
-    if !state.is_changed()
-    {
+    if !state.is_changed() {
         return;
     }
 
     let mut text = text.single_mut();
-    let text_content = match *state
-    {
+    let text_content = match *state {
         MenuButtonState::Start => "Start",
         MenuButtonState::Resume => "Resume",
     };
@@ -139,16 +175,15 @@ fn add_menu_button(mut commands: Commands)
     commands.spawn(Camera2dBundle::default());
     commands
         .spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
                 ..default()
             },
-        )
+            ..default()
+        })
         .with_children(|parent| {
             parent
                 .spawn(ButtonBundle {
@@ -165,24 +200,16 @@ fn add_menu_button(mut commands: Commands)
                 })
                 .insert(MenuButton)
                 .with_children(|parent| {
-                        parent
-                            .spawn(
-                                TextBundle::from_section(
-                                    "Start",
-                                    TextStyle {
-                                        font_size: 80.0,
-                                        color: Color::BLACK,
-                                        ..default()
-                                    },
-                                )
-                                .with_style(Style {
-                                    margin: UiRect::all(Val::Px(50.0)),
-                                    ..default()
-                                }),
+                    parent
+                        .spawn(
+                            TextBundle::from_section(
+                                "Start",
+                                TextStyle { font_size: 80.0, color: Color::BLACK, ..default() },
                             )
-                            .insert(MenuButtonText);
-                    }
-                );
+                            .with_style(Style { margin: UiRect::all(Val::Px(50.0)), ..default() }),
+                        )
+                        .insert(MenuButtonText);
+                });
         });
 }
 
@@ -211,10 +238,7 @@ fn main()
 {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(WorldSwapPlugin{
-            swap_join_recovery: Some(handle_finished_game),
-            ..default()
-        })
+        .add_plugins(WorldSwapPlugin { swap_join_recovery: Some(handle_finished_game), ..default() })
         .init_resource::<MenuButtonState>()
         .add_systems(Startup, add_menu_button)
         .add_systems(Update, (handle_menu_button_input, update_menu_button_text).chain())
