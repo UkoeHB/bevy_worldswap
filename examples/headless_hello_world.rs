@@ -1,9 +1,12 @@
 //! Demonstrates passing an asset from one world to another in a headless app.
 
+use bevy::app::AppExit;
+use bevy::asset::io::Reader;
+use bevy::asset::{AssetLoader, AsyncReadExt, LoadContext};
+use bevy::log::LogPlugin;
+use bevy::prelude::*;
+use bevy::utils::BoxedFuture;
 use bevy_worldswap::prelude::*;
-
-use bevy::{app::AppExit, asset::{io::Reader, AssetLoader, AsyncReadExt, LoadContext}, prelude::*, utils::BoxedFuture};
-
 use thiserror::Error;
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -45,10 +48,6 @@ fn try_finish_loading(mut pending: ResMut<PendingDemoString>, swap_commands: Res
 
     tracing::info!("Loader: {:?}", string);
 
-    for _ in 1..2 {
-        // x
-    }
-
     // Prepare the target app. If the target app needs access to AssetServer, then
     // we'd need to clone the asset server from the loader app and insert that as a resource before AssetPlugin.
     let mut app = App::new();
@@ -72,6 +71,7 @@ fn main()
 {
     App::new()
         .add_plugins(MinimalPlugins)
+        .add_plugins(LogPlugin::default())
         .add_plugins(AssetPlugin::default())
         .add_plugins(WorldSwapPlugin::default())
         .init_asset::<DemoString>()

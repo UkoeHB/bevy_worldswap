@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use bevy::a11y::Focus;
 use bevy::app::{PluginGroupBuilder, SubApp};
 use bevy::ecs::schedule::ScheduleLabel;
+use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::RenderExtractApp;
 use bevy::render::renderer::{RenderAdapter, RenderAdapterInfo, RenderDevice, RenderInstance, RenderQueue};
@@ -15,7 +16,6 @@ use bevy::winit::{WinitCorePlugin, WinitPlugin};
 
 use crate::*;
 
-//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 fn collect_window_events(
@@ -59,7 +59,6 @@ fn collect_window_events(
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
 
 /// Plugin for inserting an asset server as a resource.
 ///
@@ -86,7 +85,6 @@ impl Plugin for InsertAssetServerPlugin
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
 
 /// Plugin to use in addition to [`WindowPlugin`] for child worlds.
 ///
@@ -109,7 +107,6 @@ impl Plugin for ChildFocusRepairPlugin
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
 
 struct WorldSwapWindowPlugin;
 
@@ -125,7 +122,6 @@ impl Plugin for WorldSwapWindowPlugin
     }
 }
 
-//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 /// System set that runs in [`Last`].
@@ -282,7 +278,8 @@ impl Plugin for WorldSwapPlugin
 /// Plugin group for setting up Bevy plugins in a child world.
 ///
 /// This is a wrapper around Bevy's [`DefaultPlugins`], so you can edit the plugin group in the same way.
-/// The [`RenderPlugin`] and [`WinitPlugin`] should **not** be edited.
+/// - The [`RenderPlugin`] and [`WinitPlugin`] should **not** be edited.
+/// - The [`LogPlugin`] is disabled by default because we assume it was added to your initial app.
 ///
 /// Don't use this for setting up your initial app. Use [`WorldSwapPlugin`] and [`DefaultPlugins`] instead.
 pub struct ChildDefaultPlugins
@@ -293,6 +290,7 @@ pub struct ChildDefaultPlugins
     pub adapter_info: RenderAdapterInfo,
     pub adapter: RenderAdapter,
     pub instance: RenderInstance,
+    /// Option that is forwarded to [`RenderPlugin`].
     pub synchronous_pipeline_compilation: bool,
 }
 
@@ -338,6 +336,7 @@ impl PluginGroup for ChildDefaultPlugins
             .disable::<WinitPlugin>()
             .add(WinitCorePlugin)
             .add(WorldSwapWindowPlugin)
+            .disable::<LogPlugin>()
     }
 }
 

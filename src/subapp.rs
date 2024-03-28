@@ -1,9 +1,8 @@
-use bevy::utils::HashMap;
-
 use bevy::app::{AppExit, AppLabel, SubApp};
 use bevy::ecs::entity::EntityHashMap;
 use bevy::prelude::*;
 use bevy::time::TimeReceiver;
+use bevy::utils::HashMap;
 use bevy::window::{PrimaryWindow, RawHandleWrapper, WindowCreated};
 use bevy::winit::accessibility::{AccessKitAdapters, WinitActionHandlers};
 use bevy::winit::{CachedWindow, EventLoopProxy, WinitEvent, WinitSettings, WinitWindows};
@@ -32,6 +31,8 @@ fn intercept_app_exit(subapp_world: &World, world: &mut World)
 
     // Send join command.
     subapp_world.resource::<SwapCommandSender>().send(SwapCommand::Join).unwrap();
+
+    tracing::info!("converted AppExit from {:?} into SwapCommand::Join", world.id());
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -62,7 +63,9 @@ fn update_background_world(subapp_world: &mut World) -> bool
 
     let close_on_exit = subapp_world.resource::<WorldSwapPlugin>().abort_on_background_exit;
     let default_tick_rate = subapp_world.resource::<WorldSwapPlugin>().background_tick_rate;
-    let Some(background_app) = &mut subapp_world.non_send_resource_mut::<BackgroundApp>().app else { return false };
+    let Some(background_app) = &mut subapp_world.non_send_resource_mut::<BackgroundApp>().app else {
+        return false;
+    };
 
     // Detect AppExit in the background world.
     // - Do this before updating the background world in case AppExit was sent in a previous update.
@@ -307,7 +310,8 @@ fn swap_worlds(subapp_world: &mut World, main_world: &mut World, mut new_app: Wo
 
     // Swap background tick rates.
     let new_background_tick_rate = new_app.background_tick_rate.take();
-    new_app.background_tick_rate = subapp_world.non_send_resource_mut::<ForegroundApp>().background_tick_rate.take();
+    new_app.background_tick_rate =
+        subapp_world.non_send_resource_mut::<ForegroundApp>().background_tick_rate.take();
     subapp_world.non_send_resource_mut::<ForegroundApp>().background_tick_rate = new_background_tick_rate;
 
     // Note: `paused_by_tick_policy` is handled by `take_background_app` and `add_app_to_background`.
@@ -333,7 +337,8 @@ fn swap_worlds(subapp_world: &mut World, main_world: &mut World, mut new_app: Wo
 
 //-------------------------------------------------------------------------------------------------------------------
 
-fn freeze_time_in_background(subapp_world: &World, background_tick_rate_of_app: Option<BackgroundTickRate>) -> bool
+fn freeze_time_in_background(subapp_world: &World, background_tick_rate_of_app: Option<BackgroundTickRate>)
+    -> bool
 {
     let rate = get_background_tick_rate(
         subapp_world.resource::<WorldSwapPlugin>().background_tick_rate,
@@ -389,7 +394,7 @@ fn handle_swap_join_recovery(subapp_world: &mut World, main_world: &mut World, j
 
 fn apply_pass(subapp_world: &mut World, main_world: &mut World, mut new_app: WorldSwapApp)
 {
-    tracing::info!("foreground control passed from world {:?} to world {:?}, world {:?} has been dropped",
+    tracing::info!("foreground control passed from {:?} to {:?}; recovering or dropping {:?}",
         main_world.id(), new_app.world.id(), main_world.id());
 
     // Prepare the new world.
@@ -410,7 +415,7 @@ fn apply_fork(subapp_world: &mut World, main_world: &mut World, mut new_app: Wor
         panic!("SwapCommand::Fork is not allowed when there is already a world in the background");
     }
 
-    tracing::info!("world {:?} forked, now world {:?} is in the foreground and world {:?} is in the background",
+    tracing::info!("{:?} forked, now {:?} is foreground and {:?} is background",
         main_world.id(), new_app.world.id(), main_world.id());
 
     // Prepare the new world.
@@ -432,7 +437,7 @@ fn apply_swap(subapp_world: &mut World, main_world: &mut World)
     }
 
     let mut background_app = take_background_app(subapp_world).unwrap();
-    tracing::info!("world {:?} swapped, now world {:?} is in the foreground and world {:?} is in the background",
+    tracing::info!("{:?} swapped, now {:?} is foreground and {:?} is background",
         main_world.id(), background_app.world.id(), main_world.id());
 
     // Prepare the background world for entering the foreground.
@@ -452,7 +457,7 @@ fn apply_join(subapp_world: &mut World, main_world: &mut World)
     let Some(mut background_app) = take_background_app(subapp_world) else {
         panic!("SwapCommand::Join is only allowed when there is a world in the background");
     };
-    tracing::info!("world {:?} joined, now world {:?} is in the foreground and world {:?} has been recovered or dropped",
+    tracing::info!("{:?} joined, now {:?} is foreground; recovering or dropping {:?}",
         main_world.id(), background_app.world.id(), main_world.id());
 
     // Prepare the background world for entering the foreground..
@@ -522,7 +527,7 @@ pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App)
 
     // Get and apply the most recent SwapCommand.
     let mut swap_command = None;
-    while let Ok(new_swap_command) = subapp_world.resource::<SwapCommandReceiver>().recv() {
+    while let Ok(new_swap_command) = subapp_world.resource::<SwapCommandReceiver>().try_recv() {
         if swap_command.is_some() {
             tracing::warn!("discarding extra swap command");
         }
