@@ -124,32 +124,30 @@ impl WorldSwapApp
     /// [`Self::new_with`] if you want a specific tick rate for this app.
     ///
     /// ## Panics
-    /// - If the app did not add [`ChildCorePlugin`] or [`ChildDefaultPlugins`].
     /// - If the app's [`main_schedule_label`](App::main_schedule_label) is not [`Main`].
     pub fn new(mut app: App) -> Self
     {
-        if !app.world.contains_resource::<WorldSwapStatus>() {
-            panic!("failed making WorldSwapApp, app did not use ChildCorePlugin");
-        }
         if app.main_schedule_label != Main.intern() {
             panic!("failed making WorldSwapApp, app's main_schedule_label is not Main");
         }
+        app.insert_resource(WorldSwapStatus::Suspended);
         app.finish();
         app.cleanup();
         let time_receiver = app.world.remove_resource::<TimeReceiver>();
+        let render_app = app.remove_sub_app(RenderApp).or_else(|| app.remove_sub_app(RenderExtractApp));
         Self {
             world: app.world,
             background_tick_rate: None,
             paused_by_tick_policy: false,
             time_receiver,
-            render_app: app.remove_sub_app(RenderApp).or_else(|| app.remove_sub_app(RenderExtractApp)),
+            render_app,
         }
     }
 
     /// Creates a new world-swap wrapper for a fresh [`App`] with a specific [`BackgroundTickRate`].
     ///
     /// See [`Self::new`].
-    pub fn new_with(mut app: App, background_tick_rate: BackgroundTickRate) -> Self
+    pub fn new_with(app: App, background_tick_rate: BackgroundTickRate) -> Self
     {
         let mut app = Self::new(app);
         app.background_tick_rate = Some(background_tick_rate);

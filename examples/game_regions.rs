@@ -2,3 +2,5 @@
 
 //Main menu -> start game (displays region #) -> move to new region (displays region #) -> move back to starting
 // region.
+
+fn main() {}

@@ -31,9 +31,13 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-bevy           = { version = "0.13", default-features = false, features = ["bevy_asset", "bevy_render", "bevy_winit"] }
+bevy           = { version = "0.14.0-dev", default-features = false, features = ["bevy_asset", "bevy_render", "bevy_winit"] }
 crossbeam      = { version = "0.8" }
 tracing        = { version = "0.1.27" }
 
+[patch.crates-io]
+bevy = { git = "https://github.com/UkoeHB/bevy", rev = "511334408" }
+
 [dev-dependencies]
+thiserror          = { version = "1.0" }
 tracing-subscriber = { version = "0.3" }

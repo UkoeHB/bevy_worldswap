@@ -19,7 +19,7 @@ Most Bevy games have this common pattern:
 
 This definitely works, and has worked for many games for years.
 
-It feels clunky. Instead, what if we could do the following?
+It's clunky. Instead, what if we could:
 
 1. Press play button on the main menu.
 1. Initialize game state in a fresh world.
@@ -54,7 +54,7 @@ You can use the [`WorldSwapStatus`](bevy_worldswap::WorldSwapStatus) resource to
 
 ## Setting up your main app
 
-Your main app needs to use [`WorldSwapPlugin`](bevy_worldswap::WorldSwapPlugin), which must be added after [`DefaultPlugins`](bevy::prelude::DefaultPlugins) if you use them.
+Your main app needs to use [`WorldSwapPlugin`](bevy_worldswap::WorldSwapPlugin), which must be added after [`DefaultPlugins`](bevy::prelude::DefaultPlugins) if you use it.
 
 The initial app you set up will contain the first foreground world, which can be sent to the background or passed to other worlds with [`SwapCommands`](bevy_worldswap::SwapCommand).
 
@@ -77,21 +77,63 @@ fn main()
 
 ## Setting up additional apps
 
-To make a new app that should run in the foreground, you need either [`ChildCorePlugin`](bevy_worldswap::ChildCorePlugin) or [`ChildDefaultPlugins`](bevy_worldswap::ChildDefaultPlugins). The core plugin should be used *in addition* to [`MinimalPlugins`](bevy::prelude::MinimalPlugins) and [`AssetPlugin`](bevy::prelude::AssetPlugin). The default plugins should be used *instead of* [`DefaultPlugins`](bevy::prelude::DefaultPlugins).
+To make a new app that should run in the foreground, there are two options depending if your app is headless or not.
 
 Once your new app is made, pass it to [`WorldSwapApp::new`](bevy_worldswap::WorldSwapApp::new). The [`WorldSwapApp`](bevy_worldswap::WorldSwapApp) holds your app while suspended or in the background.
+
+
+### Option 1: Headless
+
+A headless app is one that doesn't use windows. Typically a headless app will use Bevy's [`MinimalPlugins`](bevy::prelude::MinimalPlugins), and if it uses assets it will include Bevy's [`AssetPlugin`](bevy::prelude::AssetPlugin).
+
+If your child app will read assets, it is recommended to re-use the `AssetServer` from the original app (this will allow the child app to read `Assets` loaded in other worlds). To do that, just clone the `AssetServer` resource into your new child app.
 
 ```rust
 use bevy::prelude::*;
 use bevy_worldswap::prelude::*;
 
-fn pass_control_to_new_app(asset_server: Res<AssetServer>, swap_commands: Res<SwapCommandSender>)
+fn pass_control_to_headless_app(asset_server: Res<AssetServer>, swap_commands: Res<SwapCommandSender>)
 {
     let my_headless_app = App::new()
         .add_plugins(MinimalPlugins)
-        .add_plugins(ChildCorePlugin)
         .insert_resource(asset_server.clone())  // Reuse the original app's AssetServer.
         .add_plugins(AssetPlugin)  // This should go *after* inserting an AssetServer clone.
+        // ...
+        ;  
+
+    swap_commands.send(SwapCommand::Pass(WorldSwapApp::new(my_headless_app)));
+}
+```
+
+
+### Option 2: Windowed
+
+A windowed app needs to use [`ChildDefaultPlugins`](bevy_worldswap::ChildDefaultPlugins) instead of [`DefaultPlugins`](bevy::prelude::DefaultPlugins). In order to link your new app with existing windows, a number of rendering resources need to be cloned.
+
+```rust
+use bevy::prelude::*;
+use bevy_worldswap::prelude::*;
+
+fn pass_control_to_windowed_app(
+    asset_server: Res<AssetServer>,
+    devices: Res<RenderDevice>,
+    queue: Res<RenderQueue>,
+    adapter_info: Res<RenderAdapterInfo>,
+    adapter: Res<RenderAdapter>,
+    instance: Res<RenderInstance>,
+    swap_commands: Res<SwapCommandSender>
+)
+{
+    let my_headless_app = App::new()
+        .add_plugins(ChildDefaultPlugins{
+            asset_server: asset_server.clone(),
+            devices: devices.clone(),
+            queue: queue.clone(),
+            adapter_info: adapter_info.clone(),
+            adapter: adapter.clone(),
+            instance: instance.clone(),
+            synchronous_pipeline_compilation: false,  // This is forwarded to RenderPlugin.
+        })
         // ...
         ;  
 

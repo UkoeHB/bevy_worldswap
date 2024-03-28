@@ -11,11 +11,11 @@ use bevy::render::{RenderApp, RenderPlugin};
 use bevy::window::{
     ExitCondition, PrimaryWindow, WindowBackendScaleFactorChanged, WindowScaleFactorChanged, WindowThemeChanged,
 };
-use bevy::winit::accessibility::AccessKitPlugin;
-use bevy::winit::{WinitPlugin, WinitSettings, WinitWindows};
+use bevy::winit::{WinitCorePlugin, WinitPlugin};
 
 use crate::*;
 
+//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 fn collect_window_events(
@@ -40,24 +40,25 @@ fn collect_window_events(
         if !windows.contains(event.window) {
             continue;
         }
-        event_cache.insert_backend_scale_factor_event(*event);
+        event_cache.insert_backend_scale_factor_event(event.clone());
     }
 
     for event in scale_factor_events.read() {
         if !windows.contains(event.window) {
             continue;
         }
-        event_cache.insert_scale_factor_event(*event);
+        event_cache.insert_scale_factor_event(event.clone());
     }
 
     for event in theme_events.read() {
         if !windows.contains(event.window) {
             continue;
         }
-        event_cache.insert_theme_event(*event);
+        event_cache.insert_theme_event(event.clone());
     }
 }
 
+//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Plugin for inserting an asset server as a resource.
@@ -85,6 +86,7 @@ impl Plugin for InsertAssetServerPlugin
 }
 
 //-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
 
 /// Plugin to use in addition to [`WindowPlugin`] for child worlds.
 ///
@@ -107,24 +109,23 @@ impl Plugin for ChildFocusRepairPlugin
 }
 
 //-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
 
-/// Plugin to use instead of [`WinitPlugin`] for child worlds.
-struct ChildWinitPlugin;
+struct WorldSwapWindowPlugin;
 
-impl Plugin for ChildWinitPlugin
+impl Plugin for WorldSwapWindowPlugin
 {
     fn build(&self, app: &mut App)
     {
-        // All of this is copied from `WinitPlugin` and must be kept in-sync with that plugin.
-        app.init_non_send_resource::<WinitWindows>()
-            .init_resource::<WinitSettings>()
-            .add_event::<WinitEvent>()
-            .add_systems(Last, (changed_windows.ambiguous_with(exit_on_all_closed), despawn_windows).chain());
-
-        app.add_plugins(AccessKitPlugin);
+        app.init_resource::<WindowEventCache>()
+            .add_event::<WindowBackendScaleFactorChanged>()
+            .add_event::<WindowScaleFactorChanged>()
+            .add_event::<WindowThemeChanged>()
+            .add_systems(Last, collect_window_events.in_set(WorldSwapSet));
     }
 }
 
+//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 
 /// System set that runs in [`Last`].
@@ -135,26 +136,9 @@ pub struct WorldSwapSet;
 
 //-------------------------------------------------------------------------------------------------------------------
 
-/// Plugin for setting up a child world if you don't want to use [`ChildDefaultPlugins`].
-///
-/// Typically this will be combined with Bevy's [`MinimalPlugin`].
-///
 /// If you want to reuse the parent world's assets in the child world, then you must insert a clone of the parent
 /// world's [`AssetServer`] to the child world. This should be done before adding [`AssetPlugin`] to your app,
 /// otherwise an extra asset server will be constructed and dropped needlessly.
-pub struct ChildCorePlugin;
-
-impl Plugin for ChildCorePlugin
-{
-    fn build(&self, app: &mut App)
-    {
-        // The WorldSwapStatus is set in WorldSwapSubApp as needed. We expect child worlds won't be updated
-        // manually, so invalid status shouldn't ever be read.
-        app.insert_resource(WorldSwapStatus::Foreground)
-            .init_resource::<WindowEventCache>()
-            .add_systems(Last, collect_window_events.in_set(WorldSwapSet));
-    }
-}
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -190,7 +174,10 @@ pub type SwapRecoveryFn = fn(&mut World, WorldSwapApp);
 
 /// Sets up world swapping for an [`App`].
 ///
-/// Use [`ChildCorePlugin`] or [`ChildDefaultPlugins`] for setting up secondary apps.
+/// Don't use this for setting up secondary apps. There are two types of secondary apps, headless and windowed.
+/// - **Headless**: No extra plugin is required. If your secondary app will load assets, clone the parent's
+/// [`AssetServer`] resource into the app (insert it *before* [`AssetPlugin`]).
+/// - **Windowed**: Use [`ChildDefaultPlugins`] instead of [`DefaultPlugins`].
 ///
 /// # Panics
 /// - Panics if the app's [`App::main_schedule_label`] is not [`Main`].
@@ -265,7 +252,10 @@ impl Plugin for WorldSwapPlugin
         app.insert_sub_app(WorldSwapSubApp, SubApp::new(worldswap_subapp, world_swap_extract));
 
         // Set up the original App's world as a world-swap child.
-        app.add_plugins(ChildCorePlugin).insert_resource(SwapCommandSender(sender));
+        // - We include `WorldSwapWindowPlugin` because we don't know yet if this app actually uses windows or not.
+        app.add_plugins(WorldSwapWindowPlugin)
+            .insert_resource(SwapCommandSender(sender))
+            .insert_resource(WorldSwapStatus::Foreground);
     }
 
     fn cleanup(&self, app: &mut App)
@@ -346,8 +336,8 @@ impl PluginGroup for ChildDefaultPlugins
             .add_before::<AssetPlugin, InsertAssetServerPlugin>(InsertAssetServerPlugin::new(self.asset_server))
             .add(ChildFocusRepairPlugin)
             .disable::<WinitPlugin>()
-            .add(ChildWinitPlugin)
-            .add(ChildCorePlugin)
+            .add(WinitCorePlugin)
+            .add(WorldSwapWindowPlugin)
     }
 }
 

@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy::time::TimeReceiver;
 use bevy::window::{PrimaryWindow, RawHandleWrapper, WindowCreated};
 use bevy::winit::accessibility::{AccessKitAdapters, WinitActionHandlers};
-use bevy::winit::{EventLoopProxy, WinitSettings, WinitWindows};
+use bevy::winit::{CachedWindow, EventLoopProxy, WinitEvent, WinitSettings, WinitWindows};
 
 use crate::*;
 
@@ -26,17 +26,19 @@ fn intercept_app_exit(subapp_world: &World, world: &mut World)
     if exit_events.is_empty() {
         return;
     }
+
+    // Prevent AppExit from continuing into the event loop.
     exit_events.clear();
 
     // Send join command.
-    subapp_world.resource::<SwapCommandSender>().send(SwapCommand::Join);
+    subapp_world.resource::<SwapCommandSender>().send(SwapCommand::Join).unwrap();
 }
 
 //-------------------------------------------------------------------------------------------------------------------
 
 fn extract_main_world_render_app(subapp_world: &mut World, main_world: &mut World)
 {
-    let Some(mut render_app) = subapp_world.non_send_resource_mut::<ForegroundApp>().render_app else { return };
+    let Some(render_app) = &mut subapp_world.non_send_resource_mut::<ForegroundApp>().render_app else { return };
     render_app.extract(main_world);
 }
 
@@ -60,7 +62,7 @@ fn update_background_world(subapp_world: &mut World) -> bool
 
     let close_on_exit = subapp_world.resource::<WorldSwapPlugin>().abort_on_background_exit;
     let default_tick_rate = subapp_world.resource::<WorldSwapPlugin>().background_tick_rate;
-    let Some(mut background_app) = subapp_world.non_send_resource_mut::<BackgroundApp>().app else { return false };
+    let Some(background_app) = &mut subapp_world.non_send_resource_mut::<BackgroundApp>().app else { return false };
 
     // Detect AppExit in the background world.
     // - Do this before updating the background world in case AppExit was sent in a previous update.
@@ -182,7 +184,7 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
             // - Note that the WinitEvent WONT synchronize with other window events, which is unfortunate and COULD
             // cause bugs for someone.
             let event = WindowCreated { window: entity_id };
-            new_world.send_event(event);
+            new_world.send_event(event.clone());
             new_world.send_event(WinitEvent::WindowCreated(event));
         }
     }
@@ -195,8 +197,8 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
     debug_assert_eq!(new_windows.entity_to_winit.len(), new_windows.windows.len());
 
     // Transfer AccessKitAdapters to the new world.
-    if let Some(access_kit) = main_world.remove_non_send_resource::<AccessKitAdapters>() {
-        let new_access_kit = EntityHashMap::default();
+    if let Some(mut access_kit) = main_world.remove_non_send_resource::<AccessKitAdapters>() {
+        let mut new_access_kit = EntityHashMap::default();
         for (entity, adapter) in access_kit.drain() {
             let Some(new_entity) = map_winit_window_entities(&main_windows, &new_windows, entity) else {
                 continue;
@@ -207,8 +209,8 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
     }
 
     // Transfer WinitActionHandlers to the new world.
-    if let Some(action_handlers) = main_world.remove_resource::<WinitActionHandlers>() {
-        let new_action_handlers = EntityHashMap::default();
+    if let Some(mut action_handlers) = main_world.remove_resource::<WinitActionHandlers>() {
+        let mut new_action_handlers = EntityHashMap::default();
         for (entity, handler) in action_handlers.drain() {
             let Some(new_entity) = map_winit_window_entities(&main_windows, &new_windows, entity) else {
                 continue;
@@ -262,7 +264,7 @@ fn prepare_world_swap(subapp_world: &mut World, main_world: &mut World, new_worl
     // WinitSettings::game for game).
     if let Some(winit_settings) = main_world.get_resource::<WinitSettings>() {
         if !new_world.contains_resource::<WinitSettings>() {
-            new_world.insert_resource(*winit_settings);
+            new_world.insert_resource(winit_settings.clone());
         }
     }
 

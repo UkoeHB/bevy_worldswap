@@ -1,7 +1,7 @@
 use bevy::ecs::entity::EntityHashMap;
 use bevy::prelude::*;
 use bevy::window::{WindowBackendScaleFactorChanged, WindowScaleFactorChanged, WindowThemeChanged};
-use bevy::winit::WinitWindows;
+use bevy::winit::{WinitEvent, WinitWindows};
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -66,7 +66,7 @@ impl WindowEventCache
             event.window = new_world_entity;
 
             // Forward to the new world.
-            new_world.send_event(event);
+            new_world.send_event(event.clone());
             new_world.send_event(WinitEvent::WindowBackendScaleFactorChanged(event));
         }
 
@@ -80,7 +80,7 @@ impl WindowEventCache
             event.window = new_world_entity;
 
             // Forward to the new world.
-            new_world.send_event(event);
+            new_world.send_event(event.clone());
             new_world.send_event(WinitEvent::WindowScaleFactorChanged(event));
         }
 
@@ -94,7 +94,7 @@ impl WindowEventCache
             event.window = new_world_entity;
 
             // Forward to the new world.
-            new_world.send_event(event);
+            new_world.send_event(event.clone());
             new_world.send_event(WinitEvent::WindowThemeChanged(event));
         }
     }

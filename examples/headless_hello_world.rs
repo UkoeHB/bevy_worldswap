@@ -1,5 +1,11 @@
 //! Demonstrates passing an asset from one world to another in a headless app.
 
+use bevy_worldswap::prelude::*;
+
+use bevy::{app::AppExit, asset::{io::Reader, AssetLoader, AsyncReadExt, LoadContext}, prelude::*, utils::BoxedFuture};
+
+use thiserror::Error;
+
 //-------------------------------------------------------------------------------------------------------------------
 
 /// The loader app starts loading the demo file.
@@ -14,7 +20,7 @@ fn load_demo_file(asset_server: Res<AssetServer>, mut pending: ResMut<PendingDem
 /// The loader app checks to see if the demo file has been loaded, then saves it.
 fn poll_for_asset(mut assets: ResMut<Assets<DemoString>>, mut pending: ResMut<PendingDemoString>)
 {
-    let PendingDemoString::Handle(handle) = *pending else {
+    let PendingDemoString::Handle(handle) = &*pending else {
         return;
     };
 
@@ -43,11 +49,10 @@ fn try_finish_loading(mut pending: ResMut<PendingDemoString>, swap_commands: Res
         // x
     }
 
-    // Prepare the target app. Note the use of ChildCorePlugin. If the target app needs access to AssetServer, then
+    // Prepare the target app. If the target app needs access to AssetServer, then
     // we'd need to clone the asset server from the loader app and insert that as a resource before AssetPlugin.
-    let app = App::new()
-        .add_plugins(MinimalPlugins)
-        .add_plugins(ChildCorePlugin)
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
         .insert_resource(string)
         .add_systems(Startup, |string: Res<DemoString>| {
             tracing::info!("App: {:?}", *string);
@@ -57,7 +62,7 @@ fn try_finish_loading(mut pending: ResMut<PendingDemoString>, swap_commands: Res
         });
 
     // Pass control to the target app. The loader app will be dropped.
-    swap_commands.send(SwapCommand::Pass(WorldSwapApp::new(app)));
+    swap_commands.send(SwapCommand::Pass(WorldSwapApp::new(app))).unwrap();
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -67,7 +72,7 @@ fn main()
 {
     App::new()
         .add_plugins(MinimalPlugins)
-        .add_plugins(AssetPlugin)
+        .add_plugins(AssetPlugin::default())
         .add_plugins(WorldSwapPlugin::default())
         .init_asset::<DemoString>()
         .register_asset_loader(DemoAssetLoader)
@@ -89,7 +94,7 @@ enum PendingDemoString
 
 impl PendingDemoString
 {
-    fn take_string(&mut self) -> Option<String>
+    fn take_string(&mut self) -> Option<DemoString>
     {
         let prev = std::mem::replace(self, Self::Empty);
         match prev {
@@ -108,7 +113,7 @@ impl PendingDemoString
 #[derive(Resource, Debug, Asset, TypePath)]
 struct DemoString
 {
-    string: String,
+    _string: String,
 }
 
 #[non_exhaustive]
@@ -133,13 +138,13 @@ impl AssetLoader for DemoAssetLoader
         &'a self,
         reader: &'a mut Reader,
         _settings: &'a (),
-        load_context: &'a mut LoadContext,
+        _load_context: &'a mut LoadContext,
     ) -> BoxedFuture<'a, Result<Self::Asset, Self::Error>>
     {
         Box::pin(async move {
             let mut string = String::new();
             reader.read_to_string(&mut string).await?;
-            Ok(DemoString { string })
+            Ok(DemoString { _string: string })
         })
     }
 
