@@ -1,5 +1,7 @@
 //! Demonstrates play/pause functionality with separate menu and game worlds.
 
+use std::fmt::Write;
+
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use bevy_worldswap::prelude::*;
@@ -37,6 +39,24 @@ fn handle_exit_button_input(
 
 //-------------------------------------------------------------------------------------------------------------------
 
+fn update_timer_text(time: Res<Time>, mut text: Query<&mut Text, With<TimerText>>)
+{
+    let mut text = text.single_mut();
+    let elapsed = time.elapsed();
+    let text = &mut text.sections[0].value;
+    text.clear();
+    let _ = write!(text, "{:?}", elapsed.as_secs());
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+fn setup(mut commands: Commands)
+{
+    commands.spawn(Camera2dBundle::default());
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
 fn add_game_buttons(mut commands: Commands)
 {
     let button_bundle = ButtonBundle {
@@ -54,7 +74,6 @@ fn add_game_buttons(mut commands: Commands)
     let text_style = TextStyle { font_size: 80.0, color: Color::BLACK, ..default() };
     let text_position_style = Style { margin: UiRect::all(Val::Px(50.0)), ..default() };
 
-    commands.spawn(Camera2dBundle::default());
     commands
         .spawn(NodeBundle {
             style: Style {
@@ -82,7 +101,28 @@ fn add_game_buttons(mut commands: Commands)
 
 //-------------------------------------------------------------------------------------------------------------------
 
-fn add_timer() {}
+fn add_timer(mut commands: Commands)
+{
+    let text_style = TextStyle { font_size: 80.0, color: Color::BLACK, ..default() };
+    let text_position_style = Style { margin: UiRect::all(Val::Px(50.0)), ..default() };
+
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Percent(65.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|parent| {
+            parent
+                .spawn(TextBundle::from_section("Exit", text_style).with_style(text_position_style))
+                .insert(TimerText);
+        });
+}
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -94,6 +134,10 @@ struct PauseButton;
 #[derive(Component)]
 struct ExitButton;
 
+/// Maker component for the game's timer text.
+#[derive(Component)]
+struct TimerText;
+
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Launches a new game in a new app.
@@ -104,10 +148,10 @@ fn start_the_game(world: &mut World)
     let mut game_app = App::new();
     game_app
         .add_plugins(ChildDefaultPlugins::new(world))
-        .add_systems(Startup, add_game_buttons)
-        .add_systems(Startup, add_timer)
+        .add_systems(Startup, (setup, add_game_buttons, add_timer).chain())
         .add_systems(Update, handle_pause_button_input)
-        .add_systems(Update, handle_exit_button_input);
+        .add_systems(Update, handle_exit_button_input)
+        .add_systems(Update, update_timer_text);
 
     world.resource::<SwapCommandSender>().send(SwapCommand::Fork(WorldSwapApp::new(game_app)));
 
@@ -165,7 +209,9 @@ fn update_menu_button_text(state: Res<MenuButtonState>, mut text: Query<&mut Tex
         MenuButtonState::Start => "Start",
         MenuButtonState::Resume => "Resume",
     };
-    text.sections[0].value = format!("{text_content}");
+    let text = &mut text.sections[0].value;
+    text.clear();
+    let _ = write!(text, "{text_content}");
 }
 
 //-------------------------------------------------------------------------------------------------------------------
