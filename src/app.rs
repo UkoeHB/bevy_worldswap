@@ -3,7 +3,7 @@ use bevy::ecs::schedule::ScheduleLabel;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::RenderExtractApp;
 use bevy::render::RenderApp;
-use bevy::time::TimeReceiver;
+use bevy::time::{TimeReceiver, TimeSender};
 
 use crate::*;
 
@@ -118,6 +118,11 @@ pub struct WorldSwapApp
     /// Cached while the world is away from the foreground so its internal time will increment properly. Normally,
     /// worlds that render will have their time sent from [`RenderApp`].
     pub(crate) time_receiver: Option<TimeReceiver>,
+    /// Sends time to this world.
+    ///
+    /// Cached so that time can be sent while in the foreground when not rendering while waiting for the previous
+    /// world to finish rendering.
+    pub(crate) time_sender: Option<TimeSender>,
     /// The world's [`RenderApp`] or [`RenderExtractApp`].
     ///
     /// Cached while the world is away from the foreground.
@@ -144,12 +149,14 @@ impl WorldSwapApp
         app.finish();
         app.cleanup();
         let time_receiver = app.world.remove_resource::<TimeReceiver>();
+        let time_sender = app.world.remove_resource::<TimeSender>();
         let render_app = app.remove_sub_app(RenderApp).or_else(|| app.remove_sub_app(RenderExtractApp));
         Self {
             world: app.world,
             background_tick_rate: None,
             paused_by_tick_policy: false,
             time_receiver,
+            time_sender,
             render_app,
         }
     }

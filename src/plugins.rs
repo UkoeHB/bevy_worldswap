@@ -9,6 +9,7 @@ use bevy::render::pipelined_rendering::RenderExtractApp;
 use bevy::render::renderer::{RenderAdapter, RenderAdapterInfo, RenderDevice, RenderInstance, RenderQueue};
 use bevy::render::settings::RenderCreation;
 use bevy::render::{RenderApp, RenderPlugin};
+use bevy::time::TimeSender;
 use bevy::window::{
     ExitCondition, PrimaryWindow, WindowBackendScaleFactorChanged, WindowScaleFactorChanged, WindowThemeChanged,
 };
@@ -60,12 +61,12 @@ fn collect_window_events(
 
 //-------------------------------------------------------------------------------------------------------------------
 
-struct InsertRenderWorkerPlugin
+struct RenderPluginFollowUp
 {
     target: RenderWorkerTarget,
 }
 
-impl InsertRenderWorkerPlugin
+impl RenderPluginFollowUp
 {
     fn new(target: RenderWorkerTarget) -> Self
     {
@@ -73,21 +74,26 @@ impl InsertRenderWorkerPlugin
     }
 }
 
-impl Plugin for InsertRenderWorkerPlugin
+impl Plugin for RenderPluginFollowUp
 {
     fn build(&self, app: &mut App)
     {
         let world_id = RenderWorkerId::from(&app.world);
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
-            tracing::warn!("RenderApp missing in InsertRenderWorkerPlugin");
+            tracing::warn!("RenderApp missing in RenderPluginFollowUp");
             return;
         };
         render_app.add_plugins(RenderWorkerPlugin{
             worker: RenderWorker{ id: world_id, target: self.target.clone() }
         });
+        let time_sender = render_app.world.get_resource::<TimeSender>().expect("RenderPlugin is missing TimeSender");
+        let time_sender = TimeSender(time_sender.0.clone());
 
         // We save the target in this world so it can be used to make new apps.
-        app.world.insert_resource(self.target.clone());
+        app.insert_resource(self.target.clone());
+
+        // We save the TimeSender so it can be extracted into WorldSwapApp.
+        app.insert_resource(time_sender);
     }
 }
 
@@ -309,13 +315,22 @@ impl Plugin for WorldSwapPlugin
     {
         // Finish prepping our RenderApp.
         if let Ok(render_app) = app.get_sub_app(RenderApp) {
-            // Transfer RenderInstance from the RenderApp to our main app so it can be transmitted to new apps.
-            // - We do this in Plugin::finish because the RenderInstance is inserted to RenderApp in this method.
             let render_instance = render_app
                 .world
                 .get_resource::<RenderInstance>()
                 .expect("WorldSwapPlugin must be added **AFTER** RenderPlugin");
+            let time_sender = render_app
+                .world
+                .get_resource::<TimeSender>()
+                .expect("RenderPlugin is missing TimeSender");
+            let time_sender = TimeSender(time_sender.0.clone());
+
+            // Transfer RenderInstance from the RenderApp to our main app so it can be transmitted to new apps.
+            // - We do this in Plugin::finish because the RenderInstance is inserted to RenderApp in this method.
             app.insert_resource(render_instance.clone());
+
+            // Transfer TimeSender to our main app so we can pass it to the ForegroundApp.
+            app.insert_resource(time_sender);
         }
     }
 
@@ -328,6 +343,7 @@ impl Plugin for WorldSwapPlugin
 
         // Get the render app.
         let maybe_render_app = app.remove_sub_app(RenderApp).or_else(|| app.remove_sub_app(RenderExtractApp));
+        let maybe_time_sender = app.world.remove_resource::<TimeSender>();
 
         // Add the current world as the foreground app in the world-swap subapp.
         let worldswap_subapp = app.sub_app_mut(WorldSwapSubApp);
@@ -336,6 +352,7 @@ impl Plugin for WorldSwapPlugin
             render_app: maybe_render_app,
             // The initial app gets the default background tick rate.
             background_tick_rate: Some(self.background_tick_rate),
+            time_sender: maybe_time_sender,
         });
     }
 }
@@ -400,7 +417,7 @@ impl PluginGroup for ChildDefaultPlugins
                 ),
                 synchronous_pipeline_compilation: self.synchronous_pipeline_compilation,
             })
-            .add_after::<RenderPlugin, InsertRenderWorkerPlugin>(InsertRenderWorkerPlugin::new(self.target.clone()))
+            .add_after::<RenderPlugin, RenderPluginFollowUp>(RenderPluginFollowUp::new(self.target.clone()))
             .add_before::<AssetPlugin, InsertAssetServerPlugin>(InsertAssetServerPlugin::new(self.asset_server))
             .add(ChildFocusRepairPlugin)
             .disable::<WinitPlugin>()

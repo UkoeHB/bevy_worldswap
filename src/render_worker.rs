@@ -6,6 +6,7 @@ use bevy::{ecs::storage::SparseSetIndex, prelude::*, render::{Render, RenderSet}
 
 fn set_render_worker(worker: Res<RenderWorker>)
 {
+    debug_assert_eq!(worker.target.id(), RenderWorkerId::default());
     worker.set();
 }
 
@@ -13,20 +14,13 @@ fn set_render_worker(worker: Res<RenderWorker>)
 
 fn unset_render_worker(worker: Res<RenderWorker>)
 {
+    debug_assert_eq!(worker.target.id(), worker.id);
     worker.unset();
 }
 
-
 //-------------------------------------------------------------------------------------------------------------------
 
-fn _is_target_worker(worker: Res<RenderWorker>) -> bool
-{
-    worker._matches_target()
-}
-
-//-------------------------------------------------------------------------------------------------------------------
-
-#[derive(Copy, Clone, Deref, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Deref, Eq, PartialEq)]
 pub struct RenderWorkerId(pub(crate) usize);
 
 impl Default for RenderWorkerId
@@ -87,11 +81,6 @@ pub(crate) struct RenderWorker
 
 impl RenderWorker
 {
-    pub(crate) fn _matches_target(&self) -> bool
-    {
-        self.id == self.target.id()
-    }
-
     pub(crate) fn set(&self)
     {
         self.target.set(self.id);
@@ -106,9 +95,6 @@ impl RenderWorker
 //-------------------------------------------------------------------------------------------------------------------
 
 /// Plugin to add to RenderApps.
-///
-/// Disables `RenderSet::Render` if the render app's world is not in the foreground.
-/// We only disable the render step so the rest of the rendering data flow won't be disrupted.
 pub(crate) struct RenderWorkerPlugin
 {
     pub(crate) worker: RenderWorker,
@@ -119,7 +105,6 @@ impl Plugin for RenderWorkerPlugin
     fn build(&self, app: &mut App)
     {
         app.insert_resource(self.worker.clone())
-            //.configure_sets(Render, RenderSet::Render.run_if(is_target_worker));
             .add_systems(ExtractSchedule, set_render_worker)
             .add_systems(Render, unset_render_worker.in_set(RenderSet::Cleanup));
     }

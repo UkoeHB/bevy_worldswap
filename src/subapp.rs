@@ -1,8 +1,8 @@
 use bevy::app::{AppExit, AppLabel, SubApp};
 use bevy::ecs::entity::EntityHashMap;
 use bevy::prelude::*;
-use bevy::time::TimeReceiver;
-use bevy::utils::HashMap;
+use bevy::time::{TimeReceiver, TimeSender};
+use bevy::utils::{HashMap, Instant};
 use bevy::window::{PrimaryWindow, RawHandleWrapper, WindowCreated};
 use bevy::winit::accessibility::{AccessKitAdapters, WinitActionHandlers};
 use bevy::winit::{CachedWindow, EventLoopProxy, WinitEvent, WinitSettings, WinitWindows};
@@ -37,13 +37,8 @@ fn intercept_app_exit(subapp_world: &World, world: &mut World)
 
 //-------------------------------------------------------------------------------------------------------------------
 
-fn can_render(subapp_world: &World, main_world: &World, is_swapping: bool) -> bool
+fn can_render(subapp_world: &World, main_world: &World) -> bool
 {
-    // Don't render in the tick where a swap occurs, so that visual effects of the swap don't 'flicker' on-screen.
-    if is_swapping {
-        return false;
-    }
-
     // Don't render if there is no render worker.
     let Some(target) = subapp_world.get_resource::<RenderWorkerTarget>() else { return false };
 
@@ -64,17 +59,20 @@ fn can_render(subapp_world: &World, main_world: &World, is_swapping: bool) -> bo
 
 //-------------------------------------------------------------------------------------------------------------------
 
-fn extract_main_world_render_app(subapp_world: &mut World, main_world: &mut World, full_render: bool)
+fn extract_main_world_render_app(subapp_world: &mut World, main_world: &mut World)
 {
-    // Refresh the render worker target.
-    if let Some(target) = subapp_world.get_resource::<RenderWorkerTarget>() {
-        target.set(RenderWorkerId::from(&*main_world));
-    }
-
     // Extract the current world and run the render app.
     let Some(render_app) = &mut subapp_world.non_send_resource_mut::<ForegroundApp>().render_app else { return };
     render_app.extract(main_world);
     render_app.run();
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+fn send_time_to_main_world(subapp_world: &World)
+{
+    let Some(time_sender) = &subapp_world.non_send_resource::<ForegroundApp>().time_sender else { return };
+    let _ = time_sender.0.send(Instant::now());
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -156,10 +154,12 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
     // Synchronize window entities.
     for (window_id, _) in new_windows.windows.iter() {
         // Access components from the main world.
+        // - We REMOVE RawHandleWrapper so the main world can be render-extracted without rendering anything.
         let Some(main_entity) = main_windows.winit_to_entity.get(window_id) else {
             tracing::error!("main world is missing an entity for window id {:?}", window_id);
             continue;
         };
+        let maybe_raw_handle_wrapper = main_world.entity_mut(*main_entity).take::<RawHandleWrapper>();
         let Some(window) = main_world.get::<Window>(*main_entity) else {
             tracing::error!(
                 "main world window entity {:?} is missing a Window component for {:?}",
@@ -176,7 +176,6 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
             );
             continue;
         };
-        let maybe_raw_handle_wrapper = main_world.get::<RawHandleWrapper>(*main_entity);
         let maybe_primary = main_world.get::<PrimaryWindow>(*main_entity);
 
         // Handle existing vs new window entities.
@@ -187,7 +186,7 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
 
             // Synchronize RawHandleWrapper component.
             if let Some(raw_handle_wrapper) = maybe_raw_handle_wrapper {
-                new_entity.insert(raw_handle_wrapper.clone());
+                new_entity.insert(raw_handle_wrapper);
             } else {
                 new_entity.remove::<RawHandleWrapper>();
             }
@@ -205,7 +204,7 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
             // Spawn new window entities in the new world to match unknown window ids.
             let mut entity_cmds = new_world.spawn((window.clone(), cached_window.clone()));
             if let Some(raw_handle_wrapper) = maybe_raw_handle_wrapper {
-                entity_cmds.insert(raw_handle_wrapper.clone());
+                entity_cmds.insert(raw_handle_wrapper);
             }
             if let Some(primary) = maybe_primary {
                 entity_cmds.insert(*primary);
@@ -351,6 +350,11 @@ fn swap_worlds(subapp_world: &mut World, main_world: &mut World, mut new_app: Wo
     // Note: `paused_by_tick_policy` is handled by `take_background_app` and `add_app_to_background`.
     debug_assert!(!new_app.paused_by_tick_policy);
 
+    // Swap time senders.
+    let new_time_sender = new_app.time_sender.take();
+    new_app.time_sender = subapp_world.non_send_resource_mut::<ForegroundApp>().time_sender.take();
+    subapp_world.non_send_resource_mut::<ForegroundApp>().time_sender = new_time_sender;
+
     // Swap time receivers.
     if let Some(time_receiver) = new_app.time_receiver.take() {
         main_world.insert_resource(time_receiver);
@@ -434,6 +438,9 @@ fn apply_pass(subapp_world: &mut World, main_world: &mut World, mut new_app: Wor
     // Prepare the new world.
     prepare_world_swap(subapp_world, main_world, &mut new_app.world);
 
+    // Force-render the foreground after removing windows.
+    extract_main_world_render_app(subapp_world, main_world);
+
     // Swap the previous world for the new world.
     let prev_app = swap_worlds(subapp_world, main_world, new_app);
 
@@ -454,6 +461,9 @@ fn apply_fork(subapp_world: &mut World, main_world: &mut World, mut new_app: Wor
 
     // Prepare the new world.
     prepare_world_swap(subapp_world, main_world, &mut new_app.world);
+
+    // Force-render the foreground after removing windows.
+    extract_main_world_render_app(subapp_world, main_world);
 
     // Swap the previous world for the new world.
     let prev_app = swap_worlds(subapp_world, main_world, new_app);
@@ -477,6 +487,9 @@ fn apply_swap(subapp_world: &mut World, main_world: &mut World)
     // Prepare the background world for entering the foreground.
     prepare_world_swap(subapp_world, main_world, &mut background_app.world);
 
+    // Force-render the foreground after removing windows.
+    extract_main_world_render_app(subapp_world, main_world);
+
     // Swap the previous world for the background world.
     let prev_app = swap_worlds(subapp_world, main_world, background_app);
 
@@ -497,6 +510,9 @@ fn apply_join(subapp_world: &mut World, main_world: &mut World)
     // Prepare the background world for entering the foreground..
     prepare_world_swap(subapp_world, main_world, &mut background_app.world);
 
+    // Force-render the foreground after removing windows.
+    extract_main_world_render_app(subapp_world, main_world);
+
     // Swap the previous world for the background world.
     let prev_app = swap_worlds(subapp_world, main_world, background_app);
 
@@ -510,6 +526,7 @@ pub(crate) struct ForegroundApp
 {
     pub(crate) render_app: Option<SubApp>,
     pub(crate) background_tick_rate: Option<BackgroundTickRate>,
+    pub(crate) time_sender: Option<TimeSender>,
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -549,10 +566,14 @@ pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App)
             tracing::warn!("discarding extra swap command");
         }
         swap_command = Some(new_swap_command);
-    }/*
-    let can_render = swap_command.is_none();
+    }
 
     // Apply the most recent SwapCommand.
+    // - This will force-render the foreground world after removing windows, which ensures the foreground world
+    // is 'fully updated' in case it expects a strict 'update - extract' sequence. We don't display the foreground
+    // world's last frame (i.e. we render after removing windows) because it may contain visual effects of the swap
+    // (e.g. button/state changes) that should only be shown after swapping back.
+    let swapped = swap_command.is_some();
     if let Some(swap_command) = swap_command {
         match swap_command {
             SwapCommand::Pass(new_app) => apply_pass(subapp_world, main_world, new_app),
@@ -560,52 +581,35 @@ pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App)
             SwapCommand::Swap => apply_swap(subapp_world, main_world),
             SwapCommand::Join => apply_join(subapp_world, main_world),
         }
-    }*/
+    }
 
     // Extract the main world into its rendering subapp.
-    // - We do this inside the world-swap app to ensure rendering extraction synchronizes with swapping worlds.
-    // It's also useful for isolating render subapp swaps within the world-swap subapp.
-    // - We do NOT extract if there is a pending swap command OR if we are waiting for a pipelined RenderApp from
-    // a previous world to finish its current job.
-    //if can_render(subapp_world, main_world, swap_command.is_some()) {
-    //if can_render {
-        extract_main_world_render_app(subapp_world, main_world, can_render(subapp_world, main_world, swap_command.is_some()));
-    //} 
-    /*else {
-        if let Some(target) = subapp_world.get_resource::<RenderWorkerTarget>() {
-            target.set(RenderWorkerId::from(&*main_world));
-        }
-    }*/
-    //}
+    // - We do NOT extract if we are waiting for a pipelined RenderApp from a previous world to finish its current job.
+    if !swapped && can_render(subapp_world, main_world) {
+        extract_main_world_render_app(subapp_world, main_world);
+    }
+    else if !swapped {
+        // If we didn't extract, then we need to send time manually to the main world otherwise Bevy logs a warning.
+        // - We do NOT send time to the just-swapped-in world because it did not yet update after being hooked back up
+        // to TimeReceiver. Note that without `!swapped` the app will freeze when swapping back to the background world.
+        send_time_to_main_world(subapp_world);
+    }
+
+    // If we swapped this tick, then skip the background update since the background world was just updated in the
+    // foreground.
+    if swapped {
+        return;
+    }
 
     // Update the background world.
-    // - Do this first since we want the background world that existed in the just-finished tick to be updated.
-    // - Note that any SwapCommands sent by the background world will go to the end of the command queue, so they
-    // will take precedence.
+    // - Do this last so rendering the foreground world is scheduled as soon as possible.
+    // - Note that any SwapCommands sent by the background world will go to the beginning of the command queue, so
+    // foreground commands will take precedence.
     let should_exit = update_background_world(subapp_world);
 
     if should_exit {
         main_world.send_event(AppExit);
         subapp_world.insert_resource(WorldSwapSubAppState::Exiting);
-    }
-
-    // Get any commands sent by the background world.
-    //let mut swap_command = None;
-    while let Ok(new_swap_command) = subapp_world.resource::<SwapCommandReceiver>().try_recv() {
-        if swap_command.is_some() {
-            tracing::warn!("discarding extra swap command");
-        }
-        swap_command = Some(new_swap_command);
-    }
-
-    // Apply the most recent SwapCommand.
-    if let Some(swap_command) = swap_command {
-        match swap_command {
-            SwapCommand::Pass(new_app) => apply_pass(subapp_world, main_world, new_app),
-            SwapCommand::Fork(new_app) => apply_fork(subapp_world, main_world, new_app),
-            SwapCommand::Swap => apply_swap(subapp_world, main_world),
-            SwapCommand::Join => apply_join(subapp_world, main_world),
-        }
     }
 }
 

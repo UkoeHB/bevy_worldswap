@@ -6,8 +6,6 @@ use bevy::app::AppExit;
 use bevy::prelude::*;
 use bevy_worldswap::prelude::*;
 
-//Main menu -> start game (displays timer) -> return to main menu -> return to game -> exit game.
-
 //-------------------------------------------------------------------------------------------------------------------
 
 fn handle_pause_button_input(
@@ -156,8 +154,6 @@ fn start_the_game(world: &mut World)
     world.resource::<SwapCommandSender>().send(SwapCommand::Fork(WorldSwapApp::new(game_app)));
 
     // The button will display "Resume" until the game app joins back with the menu.
-    // - Note that "Resume" will display for one frame before the game starts because the last frame that renders
-    // for the menu world will have the updated button text.
     *world.resource_mut::<MenuButtonState>() = MenuButtonState::Resume;
 }
 
