@@ -38,7 +38,7 @@ A `bevy_worldswap` app can hold two worlds. The **foreground** world is just a n
 
 
 
-## SwapCommands
+## Swap Commands
 
 Controlling foreground/background worlds is done with [`SwapCommands`](bevy_worldswap::SwapCommand). Swap commands can be sent from both foreground and background worlds using the [`SwapCommandSender`](bevy_worldswap::SwapCommandSender) resource.
 
@@ -56,8 +56,6 @@ You can use the [`WorldSwapStatus`](bevy_worldswap::WorldSwapStatus) resource to
 
 Your main app needs to use [`WorldSwapPlugin`](bevy_worldswap::WorldSwapPlugin), which must be added after [`DefaultPlugins`](bevy::prelude::DefaultPlugins) if you use it.
 
-The initial app you set up will contain the first foreground world, which can be sent to the background or passed to other worlds with [`SwapCommands`](bevy_worldswap::SwapCommand).
-
 ```rust
 use bevy::prelude::*;
 use bevy_worldswap::prelude::*;
@@ -73,13 +71,15 @@ fn main()
 }
 ```
 
+The initial app you set up will contain the first foreground world, which can be sent to the background or passed to other worlds with [`SwapCommands`](bevy_worldswap::SwapCommand).
+
 
 
 ## Setting up additional apps
 
 To make a new app that should run in the foreground, there are two options depending if your app is headless or not.
 
-Once your new app is made, pass it to [`WorldSwapApp::new`](bevy_worldswap::WorldSwapApp::new). The [`WorldSwapApp`](bevy_worldswap::WorldSwapApp) holds your app while suspended or in the background.
+Once your new app is made, pass it to [`WorldSwapApp::new`](bevy_worldswap::WorldSwapApp::new). [`WorldSwapApp`](bevy_worldswap::WorldSwapApp) holds your app while suspended or in the background.
 
 
 ### Option 1: Headless
@@ -92,8 +92,10 @@ If your child app will read assets, it is recommended to re-use the `AssetServer
 use bevy::prelude::*;
 use bevy_worldswap::prelude::*;
 
-fn pass_control_to_headless_app(asset_server: Res<AssetServer>, swap_commands: Res<SwapCommandSender>)
-{
+fn pass_control_to_headless_app(
+    asset_server: Res<AssetServer>,
+    swap_commands: Res<SwapCommandSender>
+) {
     let my_headless_app = App::new()
         .add_plugins(MinimalPlugins)
         .insert_resource(asset_server.clone())  // Reuse the original app's AssetServer.
@@ -112,6 +114,9 @@ A windowed app needs to use [`ChildDefaultPlugins`](bevy_worldswap::ChildDefault
 
 ```rust
 use bevy::prelude::*;
+use bevy::render::renderer::{
+    RenderAdapter, RenderAdapterInfo, RenderDevice, RenderInstance, RenderQueue
+};
 use bevy_worldswap::prelude::*;
 
 fn pass_control_to_windowed_app(
@@ -121,7 +126,8 @@ fn pass_control_to_windowed_app(
     adapter_info: Res<RenderAdapterInfo>,
     adapter: Res<RenderAdapter>,
     instance: Res<RenderInstance>,
-    swap_commands: Res<SwapCommandSender>
+    target: Res<RenderWorkerTarget>,
+    swap_commands: Res<SwapCommandSender>,
 )
 {
     let my_headless_app = App::new()
@@ -133,6 +139,7 @@ fn pass_control_to_windowed_app(
             adapter: adapter.clone(),
             instance: instance.clone(),
             synchronous_pipeline_compilation: false,  // This is forwarded to RenderPlugin.
+            target: target.clone(),
         })
         // ...
         ;  
@@ -161,7 +168,7 @@ fn main()
                 |foreground_world: &mut World, prev_app: WorldSwapApp|
                 {
                     // Extract data from the previous app, or cache it for sending
-                    // into the foreground again!
+                    // into the foreground again.
                 }
             ),
             ..Default::default()
@@ -171,11 +178,11 @@ fn main()
 }
 ```
 
-Apps passed to the recovery callback will have [`WorldSwapStatus::Suspended`](bevy_worldswap::WorldSwapStatus::Suspended).
+`WorldSwapApps` passed to the recovery callback will have [`WorldSwapStatus::Suspended`](bevy_worldswap::WorldSwapStatus::Suspended).
 
 A similar pattern holds for [`Join`](bevy_worldswap::SwapCommand::Join) commands, with the [`WorldSwapPlugin::swap_join_recovery`](WorldSwapPlugin::swap_join_recovery) callback.
 
-**Note**: When a foreground world sends `AppExit` and there is a world in the background, then the `AppExit` will be intercepted after the `Main` schedule is done and transformed into a [`Join`](bevy_worldswap::SwapCommand::Join) command. Otherwise the `AppExit` will be allowed to pass through and the entire app will shut down.
+**Note**: When a foreground world sends `AppExit` and there is a world in the background, then the `AppExit` will be intercepted and transformed into a [`Join`](bevy_worldswap::SwapCommand::Join) command (after the `Main` schedule is done). Otherwise the `AppExit` will be allowed to pass through and the entire app will shut down.
 
 
 
@@ -183,7 +190,7 @@ A similar pattern holds for [`Join`](bevy_worldswap::SwapCommand::Join) commands
 
 This project has a couple caveats to keep in mind.
 - **Logging**: Foreground and background worlds log to the same output stream.
-- **SubApps**: `SubApps` in secondary apps you construct will be discarded (other than `RenderApp`/`RenderExtractApp`, which we extract and manage internally).
+- **SubApps**: `SubApps` in secondary apps you construct will be discarded, other than `RenderApp`/`RenderExtractApp`, which we extract and manage internally.
 
 
 

@@ -54,7 +54,7 @@ pub enum SwapCommand
 /// Resource for sending [`SwapCommands`](SwapCommand).
 ///
 /// Only the last swap command sent during a tick will be applied. If a foreground and background world send
-/// commands in the same tick, then the background command will take precedence.
+/// commands in the same tick, then the foreground command will take precedence.
 #[derive(Resource, Clone)]
 pub struct SwapCommandSender(pub(crate) crossbeam::channel::Sender<SwapCommand>);
 
