@@ -191,7 +191,7 @@ A similar pattern holds for [`Join`](bevy_worldswap::SwapCommand::Join) commands
 This project has a couple caveats to keep in mind.
 - **Logging**: Foreground and background worlds log to the same output stream.
 - **SubApps**: `SubApps` in secondary apps you construct will be discarded, other than `RenderApp`/`RenderExtractApp`, which we extract and manage internally.
-- **Accessibility**: Accessibility is untested and may not work at all. The problem is accessibility node ids equal window entity ids, which are different for the same window when swapping worlds, and node construction is one-and-done when creating a new window so the internal IDs can't be mapped. A Bevy refactor for node ID assignment/management may be required. There is also a potential nasty edge condition where a window spawned in one world has the same entity id as a window spawned in a previous world.
+- **Accessibility**: Accessibility is untested and may not work at all in swapped worlds. The problem is accessibility node ids equal window entity ids, which are different for the same window when swapping worlds, and node construction is one-and-done when creating a new window so the internal IDs can't be mapped. A Bevy refactor for node ID assignment/management may be required. There is also a potential nasty edge condition where a window spawned in one world has the same entity id as a window spawned in a previous world.
 
 
 

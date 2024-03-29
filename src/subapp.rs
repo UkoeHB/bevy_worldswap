@@ -1,3 +1,4 @@
+use bevy::a11y::AccessibilityRequested;
 use bevy::app::{AppExit, AppLabel, SubApp};
 use bevy::ecs::entity::EntityHashMap;
 use bevy::prelude::*;
@@ -125,6 +126,12 @@ fn update_background_world(subapp_world: &mut World) -> bool
 
 fn transfer_windows(main_world: &mut World, new_world: &mut World)
 {
+    // Make sure the new world uses the same accessibility toggle, since it is embedded in accessibility nodes for
+    // existing windows.
+    if let Some(accessibility_toggle) = main_world.get_resource::<AccessibilityRequested>() {
+        new_world.insert_resource(accessibility_toggle.clone());
+    }
+
     // Extract WinitWindows.
     let Some(mut main_windows) = main_world.remove_non_send_resource::<WinitWindows>() else { return };
     let mut new_windows = new_world
