@@ -11,16 +11,17 @@ use crate::*;
 
 /// Command that can be sent with [`SwapCommandSender`] to control which world is running.
 ///
-/// Swap commands provide a simple 1-layer 'fork-join' pattern. Use [`Fork`](SwapCommand::Fork) in the initial world to put it
-/// in the background and run another world in the foreground. Use [`Pass`](SwapCommand::Pass) to drop the foreground world and
-/// run another world in the foreground. Use [`Join`](SwapCommand::Join) to drop the foreground world and put the background
-/// world in the foreground.
+/// Swap commands provide a simple 1-layer 'fork-join' pattern. Use [`Fork`](SwapCommand::Fork) in the initial
+/// world to put it in the background and run another world in the foreground. Use [`Pass`](SwapCommand::Pass) to
+/// drop the foreground world and run another world in the foreground. Use [`Join`](SwapCommand::Join) to drop the
+/// foreground world and put the background world in the foreground.
 ///
-/// Both the foreground and background worlds can send [`Pass`](SwapCommand::Pass), [`Swap`](SwapCommand::Swap), and [`Join`](SwapCommand::Join) commands.
-/// Only foreground worlds can send [`Fork`](SwapCommand::Fork), and only if there is no background world.
+/// Both the foreground and background worlds can send [`Pass`](SwapCommand::Pass), [`Swap`](SwapCommand::Swap),
+/// and [`Join`](SwapCommand::Join) commands. Only foreground worlds can send [`Fork`](SwapCommand::Fork), and only
+/// if there is no background world.
 ///
-/// Note that when a world is dropped due to [`Pass`](SwapCommand::Pass) or [`Join`](SwapCommand::Join), an `AppExit` event will not be
-/// sent to that world unless the world generated the event itself.
+/// Note that when a world is dropped due to [`Pass`](SwapCommand::Pass) or [`Join`](SwapCommand::Join), an
+/// `AppExit` event will not be sent to that world unless the world generated the event itself.
 pub enum SwapCommand
 {
     /// Swap in another app's world and drop the current world.

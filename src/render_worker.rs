@@ -1,6 +1,9 @@
-use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
-use bevy::{ecs::storage::SparseSetIndex, prelude::*, render::{Render, RenderSet}};
+use bevy::ecs::storage::SparseSetIndex;
+use bevy::prelude::*;
+use bevy::render::{Render, RenderSet};
 
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -51,7 +54,7 @@ impl RenderWorkerTarget
 {
     pub(crate) fn new() -> Self
     {
-        Self{ worker: Arc::new(AtomicUsize::new(usize::MAX)) }
+        Self { worker: Arc::new(AtomicUsize::new(usize::MAX)) }
     }
 
     pub fn id(&self) -> RenderWorkerId

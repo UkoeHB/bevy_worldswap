@@ -83,10 +83,11 @@ impl Plugin for RenderPluginFollowUp
             tracing::warn!("RenderApp missing in RenderPluginFollowUp");
             return;
         };
-        render_app.add_plugins(RenderWorkerPlugin{
-            worker: RenderWorker{ id: world_id, target: self.target.clone() }
+        render_app.add_plugins(RenderWorkerPlugin {
+            worker: RenderWorker { id: world_id, target: self.target.clone() },
         });
-        let time_sender = render_app.world.get_resource::<TimeSender>().expect("RenderPlugin is missing TimeSender");
+        let time_sender =
+            render_app.world.get_resource::<TimeSender>().expect("RenderPlugin is missing TimeSender");
         let time_sender = TimeSender(time_sender.0.clone());
 
         // We save the target in this world so it can be used to make new apps.
@@ -291,8 +292,8 @@ impl Plugin for WorldSwapPlugin
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             let target = RenderWorkerTarget::new();
 
-            render_app.add_plugins(RenderWorkerPlugin{
-                worker: RenderWorker{ id: world_id, target: target.clone() }
+            render_app.add_plugins(RenderWorkerPlugin {
+                worker: RenderWorker { id: world_id, target: target.clone() },
             });
 
             // We save the target in this world so it can be used to make new apps, and save it in the worldswap
@@ -319,10 +320,8 @@ impl Plugin for WorldSwapPlugin
                 .world
                 .get_resource::<RenderInstance>()
                 .expect("WorldSwapPlugin must be added **AFTER** RenderPlugin");
-            let time_sender = render_app
-                .world
-                .get_resource::<TimeSender>()
-                .expect("RenderPlugin is missing TimeSender");
+            let time_sender =
+                render_app.world.get_resource::<TimeSender>().expect("RenderPlugin is missing TimeSender");
             let time_sender = TimeSender(time_sender.0.clone());
 
             // Transfer RenderInstance from the RenderApp to our main app so it can be transmitted to new apps.

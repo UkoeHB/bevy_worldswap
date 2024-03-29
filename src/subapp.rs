@@ -52,7 +52,7 @@ fn can_render(subapp_world: &World, main_world: &World) -> bool
     if target.id() == RenderWorkerId::from(main_world) {
         return true;
     }
-    
+
     // Otherwise, a different world's renderer must be running.
     false
 }
@@ -584,14 +584,17 @@ pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App)
     }
 
     // Extract the main world into its rendering subapp.
-    // - We do NOT extract if we are waiting for a pipelined RenderApp from a previous world to finish its current job.
+    // - We do NOT extract if we are waiting for a pipelined RenderApp from a previous world to finish its current
+    //   job.
     if !swapped && can_render(subapp_world, main_world) {
         extract_main_world_render_app(subapp_world, main_world);
-    }
-    else if !swapped {
-        // If we didn't extract, then we need to send time manually to the main world otherwise Bevy logs a warning.
-        // - We do NOT send time to the just-swapped-in world because it did not yet update after being hooked back up
-        // to TimeReceiver. Note that without `!swapped` the app will freeze when swapping back to the background world.
+    } else if !swapped {
+        // If we didn't extract, then we need to send time manually to the main world otherwise Bevy logs a
+        // warning.
+        // - We do NOT send time to the just-swapped-in world because it did not yet update after being hooked back
+        //   up
+        // to TimeReceiver. Note that without `!swapped` the app will freeze when swapping back to the background
+        // world.
         send_time_to_main_world(subapp_world);
     }
 
