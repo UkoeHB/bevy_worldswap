@@ -37,10 +37,44 @@ fn intercept_app_exit(subapp_world: &World, world: &mut World)
 
 //-------------------------------------------------------------------------------------------------------------------
 
-fn extract_main_world_render_app(subapp_world: &mut World, main_world: &mut World)
+fn can_render(subapp_world: &World, main_world: &World, is_swapping: bool) -> bool
 {
+    // Don't render in the tick where a swap occurs, so that visual effects of the swap don't 'flicker' on-screen.
+    if is_swapping {
+        return false;
+    }
+
+    // Don't render if there is no render worker.
+    let Some(target) = subapp_world.get_resource::<RenderWorkerTarget>() else { return false };
+
+    // Don't render if waiting for the RenderApp of a previous world to finish its current job.
+
+    // Default value means no worker is running.
+    if target.id() == RenderWorkerId::default() {
+        return true;
+    }
+    // Current main world id means the current main world's renderer is running.
+    if target.id() == RenderWorkerId::from(main_world) {
+        return true;
+    }
+    
+    // Otherwise, a different world's renderer must be running.
+    false
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
+fn extract_main_world_render_app(subapp_world: &mut World, main_world: &mut World, full_render: bool)
+{
+    // Refresh the render worker target.
+    if let Some(target) = subapp_world.get_resource::<RenderWorkerTarget>() {
+        target.set(RenderWorkerId::from(&*main_world));
+    }
+
+    // Extract the current world and run the render app.
     let Some(render_app) = &mut subapp_world.non_send_resource_mut::<ForegroundApp>().render_app else { return };
     render_app.extract(main_world);
+    render_app.run();
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -508,12 +542,41 @@ pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App)
     // - We do this here instead of as a system in the world to ensure *all* AppExit events are captured.
     intercept_app_exit(subapp_world, main_world);
 
+    // Get any commands sent by the main world.
+    let mut swap_command = None;
+    while let Ok(new_swap_command) = subapp_world.resource::<SwapCommandReceiver>().try_recv() {
+        if swap_command.is_some() {
+            tracing::warn!("discarding extra swap command");
+        }
+        swap_command = Some(new_swap_command);
+    }/*
+    let can_render = swap_command.is_none();
+
+    // Apply the most recent SwapCommand.
+    if let Some(swap_command) = swap_command {
+        match swap_command {
+            SwapCommand::Pass(new_app) => apply_pass(subapp_world, main_world, new_app),
+            SwapCommand::Fork(new_app) => apply_fork(subapp_world, main_world, new_app),
+            SwapCommand::Swap => apply_swap(subapp_world, main_world),
+            SwapCommand::Join => apply_join(subapp_world, main_world),
+        }
+    }*/
+
     // Extract the main world into its rendering subapp.
     // - We do this inside the world-swap app to ensure rendering extraction synchronizes with swapping worlds.
     // It's also useful for isolating render subapp swaps within the world-swap subapp.
-    //todo: Consider not rendering the last frame when a foreground world is moved to the background. This way
-    // visual effects of the transition (e.g. changing menu buttons from "Play" to "Resume" won't be shown).
-    extract_main_world_render_app(subapp_world, main_world);
+    // - We do NOT extract if there is a pending swap command OR if we are waiting for a pipelined RenderApp from
+    // a previous world to finish its current job.
+    //if can_render(subapp_world, main_world, swap_command.is_some()) {
+    //if can_render {
+        extract_main_world_render_app(subapp_world, main_world, can_render(subapp_world, main_world, swap_command.is_some()));
+    //} 
+    /*else {
+        if let Some(target) = subapp_world.get_resource::<RenderWorkerTarget>() {
+            target.set(RenderWorkerId::from(&*main_world));
+        }
+    }*/
+    //}
 
     // Update the background world.
     // - Do this first since we want the background world that existed in the just-finished tick to be updated.
@@ -526,8 +589,8 @@ pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App)
         subapp_world.insert_resource(WorldSwapSubAppState::Exiting);
     }
 
-    // Get and apply the most recent SwapCommand.
-    let mut swap_command = None;
+    // Get any commands sent by the background world.
+    //let mut swap_command = None;
     while let Ok(new_swap_command) = subapp_world.resource::<SwapCommandReceiver>().try_recv() {
         if swap_command.is_some() {
             tracing::warn!("discarding extra swap command");
@@ -535,6 +598,7 @@ pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App)
         swap_command = Some(new_swap_command);
     }
 
+    // Apply the most recent SwapCommand.
     if let Some(swap_command) = swap_command {
         match swap_command {
             SwapCommand::Pass(new_app) => apply_pass(subapp_world, main_world, new_app),

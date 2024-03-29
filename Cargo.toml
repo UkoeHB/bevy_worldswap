@@ -36,7 +36,7 @@ crossbeam      = { version = "0.8" }
 tracing        = { version = "0.1.27" }
 
 [patch.crates-io]
-bevy = { git = "https://github.com/UkoeHB/bevy", rev = "386317880" }
+bevy = { git = "https://github.com/UkoeHB/bevy", rev = "2e251a67b" }
 
 [dev-dependencies]
 bevy               = { version = "0.14.0-dev", default-features = true }

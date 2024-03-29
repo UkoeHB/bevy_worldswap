@@ -60,6 +60,39 @@ fn collect_window_events(
 
 //-------------------------------------------------------------------------------------------------------------------
 
+struct InsertRenderWorkerPlugin
+{
+    target: RenderWorkerTarget,
+}
+
+impl InsertRenderWorkerPlugin
+{
+    fn new(target: RenderWorkerTarget) -> Self
+    {
+        Self { target }
+    }
+}
+
+impl Plugin for InsertRenderWorkerPlugin
+{
+    fn build(&self, app: &mut App)
+    {
+        let world_id = RenderWorkerId::from(&app.world);
+        let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
+            tracing::warn!("RenderApp missing in InsertRenderWorkerPlugin");
+            return;
+        };
+        render_app.add_plugins(RenderWorkerPlugin{
+            worker: RenderWorker{ id: world_id, target: self.target.clone() }
+        });
+
+        // We save the target in this world so it can be used to make new apps.
+        app.world.insert_resource(self.target.clone());
+    }
+}
+
+//-------------------------------------------------------------------------------------------------------------------
+
 /// Plugin for inserting an asset server as a resource.
 ///
 /// Used in ChildDefaultPlugins.
@@ -234,6 +267,7 @@ impl Plugin for WorldSwapPlugin
             panic!("failed adding WorldSwapPlugin, app's main_schedule_label is not Main");
         }
 
+        // Prep worldswap subapp.
         let (sender, receiver) = crossbeam::channel::unbounded();
 
         let mut worldswap_subapp = App::empty();
@@ -245,6 +279,23 @@ impl Plugin for WorldSwapPlugin
             .insert_resource(WorldSwapSubAppState::Running);
 
         worldswap_subapp.init_schedule(Main);
+
+        // Link the worldswap subapp with our render subapp.
+        let world_id = RenderWorkerId::from(&app.world);
+        if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+            let target = RenderWorkerTarget::new();
+
+            render_app.add_plugins(RenderWorkerPlugin{
+                worker: RenderWorker{ id: world_id, target: target.clone() }
+            });
+
+            // We save the target in this world so it can be used to make new apps, and save it in the worldswap
+            // subapp to set the current render worker target.
+            app.world.insert_resource(target.clone());
+            worldswap_subapp.insert_resource(target.clone());
+        }
+
+        // Save the worldswap subapp.
         app.insert_sub_app(WorldSwapSubApp, SubApp::new(worldswap_subapp, world_swap_extract));
 
         // Set up the original App's world as a world-swap child.
@@ -256,9 +307,10 @@ impl Plugin for WorldSwapPlugin
 
     fn finish(&self, app: &mut App)
     {
-        // Transfer RenderInstance from the RenderApp to our main app so it can be transmitted to new apps.
-        // - We do this in Plugin::finish because the RenderInstance is inserted to RenderApp in this method.
+        // Finish prepping our RenderApp.
         if let Ok(render_app) = app.get_sub_app(RenderApp) {
+            // Transfer RenderInstance from the RenderApp to our main app so it can be transmitted to new apps.
+            // - We do this in Plugin::finish because the RenderInstance is inserted to RenderApp in this method.
             let render_instance = render_app
                 .world
                 .get_resource::<RenderInstance>()
@@ -307,6 +359,7 @@ pub struct ChildDefaultPlugins
     pub instance: RenderInstance,
     /// Option that is forwarded to [`RenderPlugin`].
     pub synchronous_pipeline_compilation: bool,
+    pub target: RenderWorkerTarget,
 }
 
 impl ChildDefaultPlugins
@@ -321,6 +374,7 @@ impl ChildDefaultPlugins
             adapter: world.resource::<RenderAdapter>().clone(),
             instance: world.resource::<RenderInstance>().clone(),
             synchronous_pipeline_compilation: false,
+            target: world.resource::<RenderWorkerTarget>().clone(),
         }
     }
 }
@@ -346,6 +400,7 @@ impl PluginGroup for ChildDefaultPlugins
                 ),
                 synchronous_pipeline_compilation: self.synchronous_pipeline_compilation,
             })
+            .add_after::<RenderPlugin, InsertRenderWorkerPlugin>(InsertRenderWorkerPlugin::new(self.target.clone()))
             .add_before::<AssetPlugin, InsertAssetServerPlugin>(InsertAssetServerPlugin::new(self.asset_server))
             .add(ChildFocusRepairPlugin)
             .disable::<WinitPlugin>()
