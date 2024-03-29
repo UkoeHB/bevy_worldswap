@@ -2,7 +2,7 @@
 name = "bevy_worldswap"
 description = "Swap Bevy Worlds at runtime"
 authors = ["koe <ukoe@protonmail.com>"]
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 keywords = ["gamedev"]
 license = "MIT OR Apache-2.0"

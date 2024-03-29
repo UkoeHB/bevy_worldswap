@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.3 (Unpublished)
+
+- Fix rendering glitches when swapping worlds.
+
+
 ## 0.0.2 (Unpublished)
 
 - Initial proof of concept. Depends on a fork of Bevy currently, so this release isn't published.
