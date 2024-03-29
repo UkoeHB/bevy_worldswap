@@ -1,4 +1,4 @@
-//! Demonstrates loading an asset in one world then passing it to another world.
+//! Demonstrates loading an asset in one world then passing it as a resource to another world.
 
 use bevy::app::AppExit;
 use bevy::asset::io::Reader;
