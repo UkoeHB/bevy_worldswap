@@ -78,8 +78,8 @@ impl Plugin for RenderPluginFollowUp
 {
     fn build(&self, app: &mut App)
     {
-        let world_id = RenderWorkerId::from(&app.world);
-        let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
+        let world_id = RenderWorkerId::from(app.world());
+        let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             tracing::warn!("RenderApp missing in RenderPluginFollowUp");
             return;
         };
@@ -87,7 +87,7 @@ impl Plugin for RenderPluginFollowUp
             worker: RenderWorker { id: world_id, target: self.target.clone() },
         });
         let time_sender = render_app
-            .world
+            .world()
             .get_resource::<TimeSender>()
             .expect("RenderPlugin is missing TimeSender");
         let time_sender = TimeSender(time_sender.0.clone());
@@ -272,26 +272,30 @@ impl Plugin for WorldSwapPlugin
     {
         // Require app uses the `Main` schedule, in order to ensure consistency between the initial app and child
         // apps.
-        if app.main_schedule_label != Main.intern() {
+        if app.main().update_schedule != Some(Main.intern()) {
             panic!("failed adding WorldSwapPlugin, app's main_schedule_label is not Main");
         }
 
         // Prep worldswap subapp.
         let (sender, receiver) = crossbeam::channel::unbounded();
 
-        let mut worldswap_subapp = App::empty();
+        let mut worldswap_subapp = SubApp::new();
         worldswap_subapp
             .insert_resource(self.clone())
             .insert_resource(SwapCommandSender(sender.clone()))
             .insert_resource(SwapCommandReceiver(receiver))
-            .insert_non_send_resource(BackgroundApp { app: None })
             .insert_resource(WorldSwapSubAppState::Running);
 
+        worldswap_subapp
+            .world_mut()
+            .insert_non_send_resource(BackgroundApp { app: None });
+
         worldswap_subapp.init_schedule(Main);
+        worldswap_subapp.set_extract(world_swap_extract);
 
         // Link the worldswap subapp with our render subapp.
-        let world_id = RenderWorkerId::from(&app.world);
-        if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+        let world_id = RenderWorkerId::from(app.world());
+        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             let target = RenderWorkerTarget::new();
 
             render_app.add_plugins(RenderWorkerPlugin {
@@ -300,12 +304,12 @@ impl Plugin for WorldSwapPlugin
 
             // We save the target in this world so it can be used to make new apps, and save it in the worldswap
             // subapp to set the current render worker target.
-            app.world.insert_resource(target.clone());
+            app.insert_resource(target.clone());
             worldswap_subapp.insert_resource(target.clone());
         }
 
         // Save the worldswap subapp.
-        app.insert_sub_app(WorldSwapSubApp, SubApp::new(worldswap_subapp, world_swap_extract));
+        app.insert_sub_app(WorldSwapSubApp, worldswap_subapp);
 
         // Set up the original App's world as a world-swap child.
         // - We include `WorldSwapWindowPlugin` because we don't know yet if this app actually uses windows or not.
@@ -317,13 +321,13 @@ impl Plugin for WorldSwapPlugin
     fn finish(&self, app: &mut App)
     {
         // Finish prepping our RenderApp.
-        if let Ok(render_app) = app.get_sub_app(RenderApp) {
+        if let Some(render_app) = app.get_sub_app(RenderApp) {
             let render_instance = render_app
-                .world
+                .world()
                 .get_resource::<RenderInstance>()
                 .expect("WorldSwapPlugin must be added **AFTER** RenderPlugin");
             let time_sender = render_app
-                .world
+                .world()
                 .get_resource::<TimeSender>()
                 .expect("RenderPlugin is missing TimeSender");
             let time_sender = TimeSender(time_sender.0.clone());
@@ -340,7 +344,7 @@ impl Plugin for WorldSwapPlugin
     fn cleanup(&self, app: &mut App)
     {
         // Panic if bevy/bevy_render feature is enabled but render subapps haven't been consolidated.
-        if app.get_sub_app(RenderApp).is_ok() && app.get_sub_app(RenderExtractApp).is_ok() {
+        if app.get_sub_app(RenderApp).is_some() && app.get_sub_app(RenderExtractApp).is_some() {
             panic!("failed removing render subapp, WorldSwapPlugin must be added after DefaultPlugins");
         }
 
@@ -348,12 +352,12 @@ impl Plugin for WorldSwapPlugin
         let maybe_render_app = app
             .remove_sub_app(RenderApp)
             .or_else(|| app.remove_sub_app(RenderExtractApp));
-        let maybe_time_sender = app.world.remove_resource::<TimeSender>();
+        let maybe_time_sender = app.world_mut().remove_resource::<TimeSender>();
 
         // Add the current world as the foreground app in the world-swap subapp.
         let worldswap_subapp = app.sub_app_mut(WorldSwapSubApp);
 
-        worldswap_subapp.insert_non_send_resource(ForegroundApp {
+        worldswap_subapp.world_mut().insert_non_send_resource(ForegroundApp {
             render_app: maybe_render_app,
             // The initial app gets the default background tick rate.
             background_tick_rate: Some(self.background_tick_rate),

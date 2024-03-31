@@ -66,7 +66,7 @@ fn extract_main_world_render_app(subapp_world: &mut World, main_world: &mut Worl
     // Extract the current world and run the render app.
     let Some(render_app) = &mut subapp_world.non_send_resource_mut::<ForegroundApp>().render_app else { return };
     render_app.extract(main_world);
-    render_app.run();
+    render_app.update();
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -561,10 +561,8 @@ pub(crate) enum WorldSwapSubAppState
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, AppLabel)]
 pub(crate) struct WorldSwapSubApp;
 
-pub(crate) fn world_swap_extract(main_world: &mut World, subapp: &mut App)
+pub(crate) fn world_swap_extract(main_world: &mut World, subapp_world: &mut World)
 {
-    let subapp_world = &mut subapp.world;
-
     // Intercept AppExit events from the main world and convert them to SwapCommand::Join commands if possible.
     // - We do this here instead of as a system in the world to ensure *all* AppExit events are captured.
     intercept_app_exit(subapp_world, main_world);

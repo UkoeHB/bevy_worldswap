@@ -143,19 +143,19 @@ impl WorldSwapApp
     /// - If the app's [`main_schedule_label`](App::main_schedule_label) is not [`Main`].
     pub fn new(mut app: App) -> Self
     {
-        if app.main_schedule_label != Main.intern() {
+        if app.main().update_schedule != Some(Main.intern()) {
             panic!("failed making WorldSwapApp, app's main_schedule_label is not Main");
         }
         app.insert_resource(WorldSwapStatus::Suspended);
         app.finish();
         app.cleanup();
-        let time_receiver = app.world.remove_resource::<TimeReceiver>();
-        let time_sender = app.world.remove_resource::<TimeSender>();
+        let time_receiver = app.world_mut().remove_resource::<TimeReceiver>();
+        let time_sender = app.world_mut().remove_resource::<TimeSender>();
         let render_app = app
             .remove_sub_app(RenderApp)
             .or_else(|| app.remove_sub_app(RenderExtractApp));
         Self {
-            world: app.world,
+            world: std::mem::take(app.world_mut()),
             background_tick_rate: None,
             paused_by_tick_policy: false,
             time_receiver,
