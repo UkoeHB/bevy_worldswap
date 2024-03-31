@@ -56,7 +56,7 @@ You can use the [`WorldSwapStatus`](bevy_worldswap::WorldSwapStatus) resource to
 
 Your main app needs to use [`WorldSwapPlugin`](bevy_worldswap::WorldSwapPlugin), which must be added after [`DefaultPlugins`](bevy::prelude::DefaultPlugins) if you use it.
 
-```rust
+```ignore
 use bevy::prelude::*;
 use bevy_worldswap::prelude::*;
 
@@ -67,7 +67,7 @@ fn main()
         // ...
         .add_plugins(WorldSwapPlugin::default())
         // ...
-        ;
+        .run();
 }
 ```
 
