@@ -67,7 +67,7 @@ fn main()
         // ...
         .add_plugins(WorldSwapPlugin::default())
         // ...
-        .run();
+        ;
 }
 ```
 
@@ -96,10 +96,10 @@ fn pass_control_to_headless_app(
     asset_server: Res<AssetServer>,
     swap_commands: Res<SwapCommandSender>
 ) {
-    let my_headless_app = App::new()
-        .add_plugins(MinimalPlugins)
+    let mut my_headless_app = App::new();
+    my_headless_app.add_plugins(MinimalPlugins)
         .insert_resource(asset_server.clone())  // Reuse the original app's AssetServer.
-        .add_plugins(AssetPlugin)  // This should go *after* inserting an AssetServer clone.
+        .add_plugins(AssetPlugin::default())  // This should go *after* inserting an AssetServer clone.
         // ...
         ;  
 
@@ -130,8 +130,8 @@ fn pass_control_to_windowed_app(
     swap_commands: Res<SwapCommandSender>,
 )
 {
-    let my_headless_app = App::new()
-        .add_plugins(ChildDefaultPlugins{
+    let mut my_headless_app = App::new();
+    my_headless_app.add_plugins(ChildDefaultPlugins{
             asset_server: asset_server.clone(),
             devices: devices.clone(),
             queue: queue.clone(),
