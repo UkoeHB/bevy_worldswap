@@ -84,11 +84,15 @@ fn add_game_buttons(mut commands: Commands)
             ..default()
         })
         .with_children(|parent| {
-            parent.spawn(button_bundle.clone()).insert(PauseButton).with_children(|parent| {
-                parent.spawn(
-                    TextBundle::from_section("Pause", text_style.clone()).with_style(text_position_style.clone()),
-                );
-            });
+            parent
+                .spawn(button_bundle.clone())
+                .insert(PauseButton)
+                .with_children(|parent| {
+                    parent.spawn(
+                        TextBundle::from_section("Pause", text_style.clone())
+                            .with_style(text_position_style.clone()),
+                    );
+                });
         })
         .with_children(|parent| {
             parent.spawn(button_bundle).insert(ExitButton).with_children(|parent| {
@@ -151,7 +155,9 @@ fn start_the_game(world: &mut World)
         .add_systems(Update, handle_exit_button_input)
         .add_systems(Update, update_timer_text);
 
-    world.resource::<SwapCommandSender>().send(SwapCommand::Fork(WorldSwapApp::new(game_app)));
+    world
+        .resource::<SwapCommandSender>()
+        .send(SwapCommand::Fork(WorldSwapApp::new(game_app)));
 
     // The button will display "Resume" until the game app joins back with the menu.
     *world.resource_mut::<MenuButtonState>() = MenuButtonState::Resume;

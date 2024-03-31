@@ -3,7 +3,7 @@ use bevy::app::{AppExit, AppLabel, SubApp};
 use bevy::ecs::entity::EntityHashMap;
 use bevy::prelude::*;
 use bevy::time::{TimeReceiver, TimeSender};
-use bevy::utils::{HashMap, Instant};
+use bevy::utils::Instant;
 use bevy::window::{PrimaryWindow, RawHandleWrapper, WindowCreated};
 use bevy::winit::accessibility::{AccessKitAdapters, WinitActionHandlers};
 use bevy::winit::{CachedWindow, EventLoopProxy, WinitEvent, WinitSettings, WinitWindows};
@@ -140,12 +140,12 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
         .expect("if the main world has WinitWindows, the new world should too");
 
     // Validate that the new world did not create any windows.
-    if new_windows.windows.len() > 0 {
+    if !new_windows.windows.is_empty() {
         panic!("a world that isn't in the foreground created windows");
     }
 
     // Move winit windows to the new world.
-    new_windows.windows = std::mem::replace(&mut main_windows.windows, HashMap::default());
+    new_windows.windows = std::mem::take(&mut main_windows.windows);
 
     // Despawn window entities in the new world if they don't have windows.
     for (entity, window_id) in new_windows.entity_to_winit.iter() {
@@ -273,14 +273,14 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
 fn drain_cached_window_events(main_world: &mut World, new_world: &mut World)
 {
     // Get WinitWindows for entity mapping.
-    let Some(mut main_windows) = main_world.remove_non_send_resource::<WinitWindows>() else { return };
-    let mut new_windows = new_world
+    let Some(main_windows) = main_world.remove_non_send_resource::<WinitWindows>() else { return };
+    let new_windows = new_world
         .remove_non_send_resource::<WinitWindows>()
         .expect("if main world has WinitWindows, new worlds should too");
 
     // Send window events
     let mut main_window_events = main_world.resource_mut::<WindowEventCache>();
-    main_window_events.dispatch(&mut main_windows, &mut new_windows, new_world);
+    main_window_events.dispatch(&main_windows, &new_windows, new_world);
 
     // Put WinitWindows back.
     main_world.insert_non_send_resource(main_windows);
@@ -346,9 +346,13 @@ fn swap_worlds(subapp_world: &mut World, main_world: &mut World, mut new_app: Wo
 
     // Swap background tick rates.
     let new_background_tick_rate = new_app.background_tick_rate.take();
-    new_app.background_tick_rate =
-        subapp_world.non_send_resource_mut::<ForegroundApp>().background_tick_rate.take();
-    subapp_world.non_send_resource_mut::<ForegroundApp>().background_tick_rate = new_background_tick_rate;
+    new_app.background_tick_rate = subapp_world
+        .non_send_resource_mut::<ForegroundApp>()
+        .background_tick_rate
+        .take();
+    subapp_world
+        .non_send_resource_mut::<ForegroundApp>()
+        .background_tick_rate = new_background_tick_rate;
 
     // Note: `paused_by_tick_policy` is handled by `take_background_app` and `add_app_to_background`.
     debug_assert!(!new_app.paused_by_tick_policy);
@@ -409,7 +413,10 @@ fn add_app_to_background(subapp_world: &mut World, mut background_app: WorldSwap
     }
 
     // Insert the background app.
-    let prev_background = subapp_world.non_send_resource_mut::<BackgroundApp>().app.replace(background_app);
+    let prev_background = subapp_world
+        .non_send_resource_mut::<BackgroundApp>()
+        .app
+        .replace(background_app);
     assert!(prev_background.is_none());
 }
 

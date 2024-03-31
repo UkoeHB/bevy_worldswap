@@ -151,7 +151,9 @@ impl WorldSwapApp
         app.cleanup();
         let time_receiver = app.world.remove_resource::<TimeReceiver>();
         let time_sender = app.world.remove_resource::<TimeSender>();
-        let render_app = app.remove_sub_app(RenderApp).or_else(|| app.remove_sub_app(RenderExtractApp));
+        let render_app = app
+            .remove_sub_app(RenderApp)
+            .or_else(|| app.remove_sub_app(RenderExtractApp));
         Self {
             world: app.world,
             background_tick_rate: None,

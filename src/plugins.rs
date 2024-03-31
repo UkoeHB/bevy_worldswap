@@ -86,8 +86,10 @@ impl Plugin for RenderPluginFollowUp
         render_app.add_plugins(RenderWorkerPlugin {
             worker: RenderWorker { id: world_id, target: self.target.clone() },
         });
-        let time_sender =
-            render_app.world.get_resource::<TimeSender>().expect("RenderPlugin is missing TimeSender");
+        let time_sender = render_app
+            .world
+            .get_resource::<TimeSender>()
+            .expect("RenderPlugin is missing TimeSender");
         let time_sender = TimeSender(time_sender.0.clone());
 
         // We save the target in this world so it can be used to make new apps.
@@ -320,8 +322,10 @@ impl Plugin for WorldSwapPlugin
                 .world
                 .get_resource::<RenderInstance>()
                 .expect("WorldSwapPlugin must be added **AFTER** RenderPlugin");
-            let time_sender =
-                render_app.world.get_resource::<TimeSender>().expect("RenderPlugin is missing TimeSender");
+            let time_sender = render_app
+                .world
+                .get_resource::<TimeSender>()
+                .expect("RenderPlugin is missing TimeSender");
             let time_sender = TimeSender(time_sender.0.clone());
 
             // Transfer RenderInstance from the RenderApp to our main app so it can be transmitted to new apps.
@@ -341,7 +345,9 @@ impl Plugin for WorldSwapPlugin
         }
 
         // Get the render app.
-        let maybe_render_app = app.remove_sub_app(RenderApp).or_else(|| app.remove_sub_app(RenderExtractApp));
+        let maybe_render_app = app
+            .remove_sub_app(RenderApp)
+            .or_else(|| app.remove_sub_app(RenderExtractApp));
         let maybe_time_sender = app.world.remove_resource::<TimeSender>();
 
         // Add the current world as the foreground app in the world-swap subapp.
