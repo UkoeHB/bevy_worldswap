@@ -32,7 +32,7 @@ fn handle_exit_button_input(
 
     // Shut down the game world. The menu world will be put into the foreground, and the game world will be
     // recovered.
-    exit.send(AppExit);
+    exit.send(AppExit::Success);
 }
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -236,9 +236,6 @@ fn add_menu_button(mut commands: Commands)
             parent
                 .spawn(ButtonBundle {
                     style: Style {
-                        width: Val::Px(250.0),
-                        height: Val::Px(65.0),
-                        margin: UiRect::all(Val::Px(20.0)),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         ..default()
@@ -254,7 +251,7 @@ fn add_menu_button(mut commands: Commands)
                                 "Start",
                                 TextStyle { font_size: 80.0, color: Color::BLACK, ..default() },
                             )
-                            .with_style(Style { margin: UiRect::all(Val::Px(50.0)), ..default() }),
+                            .with_style(Style { margin: UiRect::all(Val::Px(15.0)), ..default() }),
                         )
                         .insert(MenuButtonText);
                 });

@@ -5,8 +5,8 @@ use bevy::prelude::*;
 use bevy::time::{TimeReceiver, TimeSender};
 use bevy::utils::Instant;
 use bevy::window::{PrimaryWindow, RawHandleWrapper, WindowCreated};
-use bevy::winit::accessibility::{AccessKitAdapters, WinitActionHandlers};
-use bevy::winit::{CachedWindow, EventLoopProxy, WinitEvent, WinitSettings, WinitWindows};
+use bevy::winit::accessibility::{AccessKitAdapters, WinitActionRequestHandlers};
+use bevy::winit::{CachedWindow, EventLoopProxy, WakeUp, WinitEvent, WinitSettings, WinitWindows};
 
 use crate::*;
 
@@ -251,8 +251,8 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
         new_world.insert_non_send_resource(AccessKitAdapters(new_access_kit));
     }
 
-    // Transfer WinitActionHandlers to the new world.
-    if let Some(mut action_handlers) = main_world.remove_resource::<WinitActionHandlers>() {
+    // Transfer WinitActionRequestHandlers to the new world.
+    if let Some(mut action_handlers) = main_world.remove_resource::<WinitActionRequestHandlers>() {
         let mut new_action_handlers = EntityHashMap::default();
         for (entity, handler) in action_handlers.drain() {
             let Some(new_entity) = map_winit_window_entities(&main_windows, &new_windows, entity) else {
@@ -260,7 +260,7 @@ fn transfer_windows(main_world: &mut World, new_world: &mut World)
             };
             new_action_handlers.insert(new_entity, handler);
         }
-        new_world.insert_resource(WinitActionHandlers(new_action_handlers));
+        new_world.insert_resource(WinitActionRequestHandlers(new_action_handlers));
     }
 
     // Return WinitWindows.
@@ -295,7 +295,7 @@ fn prepare_world_swap(subapp_world: &mut World, main_world: &mut World, new_worl
     new_world.insert_resource(subapp_world.resource::<SwapCommandSender>().clone());
 
     // Connect the new world to the winit event loop.
-    if let Some(event_loop_proxy) = main_world.get_non_send_resource::<EventLoopProxy>() {
+    if let Some(event_loop_proxy) = main_world.get_non_send_resource::<EventLoopProxy<WakeUp>>() {
         new_world.insert_non_send_resource(event_loop_proxy.clone());
     }
 
@@ -618,7 +618,7 @@ pub(crate) fn world_swap_extract(main_world: &mut World, subapp_world: &mut Worl
     let should_exit = update_background_world(subapp_world);
 
     if should_exit {
-        main_world.send_event(AppExit);
+        main_world.send_event(AppExit::Success);
         subapp_world.insert_resource(WorldSwapSubAppState::Exiting);
     }
 }

@@ -50,7 +50,7 @@ fn try_finish_loading(mut pending: ResMut<PendingDemoString>, swap_commands: Res
             tracing::info!("App: {:?}", *string);
         })
         .add_systems(Update, |mut exit: EventWriter<AppExit>| {
-            exit.send(AppExit);
+            exit.send(AppExit::Success);
         });
 
     // Pass control to the target app. The loader app will be dropped.
